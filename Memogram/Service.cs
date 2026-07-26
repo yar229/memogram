@@ -1,10 +1,11 @@
+using Memogram.Clients.Memos;
+using Memogram.Clients.Memos.Models;
+using Memogram.Store;
+using MimeDetective;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
-using Memogram.Clients.Memos;
-using Memogram.Clients.Memos.Models;
-using Memogram.Store;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
@@ -28,6 +29,8 @@ public partial class Service
 
     private InstanceProfile? _instanceProfile;
     private readonly HashSet<string> _allowedUsernames;
+
+    private readonly IContentInspector _contentInspector;
 
     public Service(MemogramConfig memogramConfig, TelegramConfig telegramConfig)
     {
@@ -54,6 +57,11 @@ public partial class Service
         _bot = !string.IsNullOrEmpty(_telegramConfig.BotProxyAddr)
             ? new TelegramBotClient(new TelegramBotClientOptions(_telegramConfig.BotToken, _telegramConfig.BotProxyAddr), telegramHttpClient)
             : new TelegramBotClient(_telegramConfig.BotToken, telegramHttpClient);
+
+        _contentInspector = new ContentInspectorBuilder()
+        {
+            Definitions = MimeDetective.Definitions.DefaultDefinitions.All()
+        }.Build();
     }
 
     private static HttpClientHandler CreateHttpClientHandler(string proxyUrl)
@@ -407,7 +415,7 @@ public partial class Service
         return await memoClient.CreateMemoAsync(content, tags: _memogramConfig.TagsToAdd, ct: ct);
     }
 
-    private async Task ProcessFileMessage(MemosClient client, ITelegramBotClient bot, long chatId, string fileId, Memo memo, CancellationToken ct)
+    private async Task ProcessFileMessage(MemosClient memosClient, ITelegramBotClient bot, long chatId, string fileId, Memo memo, CancellationToken ct)
     {
         try
         {
@@ -420,7 +428,14 @@ public partial class Service
             var bytes = await response.Content.ReadAsByteArrayAsync(ct);
             var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
 
-            await client.CreateAttachmentAsync(
+            if (string.IsNullOrEmpty(contentType) || "application/octet-stream".Equals(contentType, StringComparison.OrdinalIgnoreCase))
+            { 
+                var bestMatch = _contentInspector.Inspect(bytes).ByMimeType().FirstOrDefault();
+                if (null != bestMatch && !string.IsNullOrEmpty(bestMatch.MimeType))
+                    contentType = bestMatch.MimeType;
+            }
+
+            await memosClient.CreateAttachmentAsync(
                 filename: Path.GetFileName(file.FilePath),
                 contentType: contentType,
                 content: bytes,

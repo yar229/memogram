@@ -1,4 +1,5 @@
 using Memogram.Clients.Memos.Models;
+using System.Buffers.Text;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -59,9 +60,8 @@ public class MemosClient
         };
         var response = await _httpClient.PostAsJsonAsync(Url("/api/v1/memos"), body, ct);
         response.EnsureSuccessStatusCode();
-        //var z = await response.Content.ReadAsStringAsync(ct);
-        var wrapper = await response.Content.ReadFromJsonAsync<Memo>(cancellationToken: ct);
-        return wrapper ?? throw new InvalidOperationException("No memo in response");
+        var memo = await response.Content.ReadFromJsonAsync<Memo>(cancellationToken: ct);
+        return memo ?? throw new InvalidOperationException("No memo in response");
     }
 
     public async Task<Memo> GetMemoAsync(string name, CancellationToken ct = default)
@@ -99,23 +99,19 @@ public class MemosClient
         return result?.Memos ?? new List<Memo>();
     }
 
-    public async Task<Attachment> CreateAttachmentAsync(string filename, string contentType, byte[] content, string? memoName = null, CancellationToken ct = default)
+    public async Task<CreateAttachmentResponse> CreateAttachmentAsync(string filename, string contentType, byte[] content, string? memoName = null, CancellationToken ct = default)
     {
-        using var formContent = new MultipartFormDataContent();
-        var fileContent = new ByteArrayContent(content);
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
-        formContent.Add(fileContent, "file", filename);
-
-        var url = $"/api/v1/attachments";
-        if (!string.IsNullOrEmpty(memoName))
+        var body = new CreateAttachmentRequest
         {
-            url += $"?parent={Uri.EscapeDataString(memoName)}";
-        }
-
-        var response = await _httpClient.PostAsync(Url(url), formContent, ct);
+            Filename = filename,
+            Memo = memoName,
+            Type = contentType,
+            Content = content
+        };
+        var response = await _httpClient.PostAsJsonAsync(Url("/api/v1/attachments"), body, ct);
         response.EnsureSuccessStatusCode();
-        var wrapper = await response.Content.ReadFromJsonAsync<AttachmentWrapper>(cancellationToken: ct);
-        return wrapper?.Attachment ?? throw new InvalidOperationException("No attachment in response");
+        var res = await response.Content.ReadFromJsonAsync<CreateAttachmentResponse>(cancellationToken: ct);
+        return res ?? throw new InvalidOperationException("No attachment in response");
     }
 
     private class AuthenticatedHandler : DelegatingHandler
