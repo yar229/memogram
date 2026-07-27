@@ -35,7 +35,7 @@ public class MemosClient
 
     public async Task<User> GetCurrentUserAsync(CancellationToken ct = default)
     {
-        var response = await _httpClient.GetAsync(Url("/api/v1/users/me"), ct);
+        var response = await _httpClient.GetAsync(Url("/api/v1/auth/me"), ct);
         response.EnsureSuccessStatusCode();
         var wrapper = await response.Content.ReadFromJsonAsync<UserWrapper>(cancellationToken: ct);
         return wrapper?.User ?? throw new InvalidOperationException("No user in response");
