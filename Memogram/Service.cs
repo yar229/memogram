@@ -19,6 +19,8 @@ namespace Memogram;
 public partial class Service
 {
     private readonly TelegramBotClient _bot;
+    private readonly Task<Telegram.Bot.Types.User> _botUser;
+
     private readonly MemosClient _client;
     private readonly MemogramConfig _memogramConfig;
     private readonly TelegramConfig _telegramConfig;
@@ -58,6 +60,8 @@ public partial class Service
         _bot = !string.IsNullOrEmpty(_telegramConfig.BotProxyAddr)
             ? new TelegramBotClient(new TelegramBotClientOptions(_telegramConfig.BotToken, _telegramConfig.BotProxyAddr), telegramHttpClient)
             : new TelegramBotClient(_telegramConfig.BotToken, telegramHttpClient);
+        _botUser = _bot.GetMe();
+
 
         _contentInspector = new ContentInspectorBuilder()
         {
@@ -267,7 +271,10 @@ public partial class Service
     {
         var chatId = message.Chat.Id;
         var userId = message.From!.Id;
-        var searchString = (message.Text ?? "").Replace("/search", "", StringComparison.Ordinal).Trim();
+        var username = (await _botUser).Username;
+        var searchString = (message.Text ?? "")
+            .Replace($"/search@{username}", "", StringComparison.OrdinalIgnoreCase)
+            .Replace("/search", "", StringComparison.OrdinalIgnoreCase).Trim();
 
         if (string.IsNullOrEmpty(searchString))
         {
