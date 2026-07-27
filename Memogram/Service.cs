@@ -5,6 +5,7 @@ using MimeDetective;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
@@ -80,7 +81,7 @@ public partial class Service
         try
         {
             _instanceProfile = await _client.GetInstanceProfileAsync(ct);
-            Console.WriteLine($"Instance profile: {_instanceProfile.InstanceUrl}");
+            Console.WriteLine($"Instance profile: {JsonSerializer.Serialize(_instanceProfile)}");
         }
         catch (Exception ex)
         {
