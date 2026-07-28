@@ -84,12 +84,7 @@ public static partial class MemosUtils
     }
 
     private static bool IsSupportedEntity(MessageEntityType? entityType)
-    {
-        return entityType is MessageEntityType.Url
-            or MessageEntityType.TextLink
-            or MessageEntityType.Bold
-            or MessageEntityType.Italic;
-    }
+        => entityType != null && EntityConverters.ContainsKey(entityType.Value);
 
     private static string ApplyEntityFormatting(string segment, MessageEntity entity)
     {
@@ -104,15 +99,26 @@ public static partial class MemosUtils
         var core = match.Groups[2].Value;
         var suffix = match.Groups[3].Value;
 
-        return entity.Type switch
-        {
-            MessageEntityType.Url => $"{prefix}[{core}]({core}){suffix}",
-            MessageEntityType.TextLink => $"{prefix}[{core}]({entity.Url}){suffix}",
-            MessageEntityType.Bold => $"{prefix}**{core}**{suffix}",
-            MessageEntityType.Italic => $"{prefix}*{core}*{suffix}",
-            _ => segment,
-        };
+        return EntityConverters.TryGetValue(entity.Type, out var converter)
+            ? converter(prefix, core, suffix, entity)
+            : segment;
     }
+
+    private static readonly Dictionary<MessageEntityType, Func<string, string, string, MessageEntity, string>> EntityConverters = new()
+    {
+        [MessageEntityType.Url] = (string p, string c, string s, MessageEntity entity) => $"{p}[{c}]({c}){s}",
+        [MessageEntityType.TextLink] = (string p, string c, string s, MessageEntity entity) => $"{p}[{c}]({entity.Url}){s}",
+        [MessageEntityType.Bold] = (string p, string c, string s, MessageEntity entity) => $"{p}**{c}**{s}",
+        [MessageEntityType.Italic] = (string p, string c, string s, MessageEntity entity) => $"{p}*{c}*{s}",
+        [MessageEntityType.Underline] = (string p, string c, string s, MessageEntity entity) => $"{p}<ins>{c}</ins>{s}",
+        [MessageEntityType.Strikethrough] = (string p, string c, string s, MessageEntity entity) => $"{p}~~{c}~~{s}",
+        [MessageEntityType.Spoiler] = (string p, string c, string s, MessageEntity entity) => $"{p}[{c}](#spoiler){s}",
+        [MessageEntityType.DateTime] = (string p, string c, string s, MessageEntity entity) => $"{p}{c}({entity.UnixTime}){s}",
+        [MessageEntityType.Blockquote] = (string p, string c, string s, MessageEntity entity) => $"{p}\n> {c}\n\n{s}",
+        [MessageEntityType.Code] = (string p, string c, string s, MessageEntity entity) => $"{p}`{c}`{s}",
+        [MessageEntityType.Pre] = (string p, string c, string s, MessageEntity entity) => $"{p}```\n{c}\n```{s}",
+        [MessageEntityType.Mention] = (string p, string c, string s, MessageEntity entity) => $"{p}[{c}](https://t.me/{c[1..]}){s}",
+    };
 
     internal static string BuildMemoSearchFilter(string searchString, Clients.Memos.Models.User? user)
     {
@@ -131,6 +137,8 @@ public static partial class MemosUtils
         return $"{filter} && creator == \"{creator}\"";
     }
 
-    [GeneratedRegex(@"^(\s*)(.*?)(\s*)$")]
+    [GeneratedRegex(@"(?s)^(\s*)(.*?)(\s*)$")]
+    //[GeneratedRegex(@"\A(\s*)(.*?)(\s*)\Z")]
+    //[GeneratedRegex(@"^(\s*)(.*?)(\s*)$")]
     private static partial Regex EntityRegex();
 }
