@@ -1,5 +1,4 @@
-using Memogram;
-using Telegram.Bot.Types;
+﻿using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Xunit;
 
@@ -10,21 +9,21 @@ public class ServiceTests
     [Fact]
     public void BuildMemoSearchFilter_WithUser_UsesResourceName()
     {
-        var result = Service.BuildMemoSearchFilter("needle", new Clients.Memos.Models.User { Name = "users/alice", Username = "alice" });
+        var result = MemosUtils.BuildMemoSearchFilter("needle", new Clients.Memos.Models.User { Name = "users/alice", Username = "alice" });
         Assert.Equal("content.contains(\"needle\") && creator == \"users/alice\"", result);
     }
 
     [Fact]
     public void BuildMemoSearchFilter_FallsBackToUsername()
     {
-        var result = Service.BuildMemoSearchFilter("needle", new Clients.Memos.Models.User { Username = "alice" });
+        var result = MemosUtils.BuildMemoSearchFilter("needle", new Clients.Memos.Models.User { Username = "alice" });
         Assert.Equal("content.contains(\"needle\") && creator == \"users/alice\"", result);
     }
 
     [Fact]
     public void BuildMemoSearchFilter_AllowsNullUser()
     {
-        var result = Service.BuildMemoSearchFilter("needle", null);
+        var result = MemosUtils.BuildMemoSearchFilter("needle", null);
         Assert.Equal("content.contains(\"needle\")", result);
     }
 
@@ -39,7 +38,7 @@ public class ServiceTests
             new MessageEntity { Type = MessageEntityType.TextLink, Offset = 30, Length = 4, Url = "https://example.com" },
         };
 
-        var got = Service.FormatContent(content, entities);
+        var got = MemosUtils.FormatContent(content, entities);
         var want = "See [example.com](example.com) and **bold** text [link](https://example.com)";
         Assert.Equal(want, got);
     }
@@ -54,7 +53,7 @@ public class ServiceTests
             new MessageEntity { Type = MessageEntityType.Italic, Offset = 0, Length = 6 },
         };
 
-        var got = Service.FormatContent(content, entities);
+        var got = MemosUtils.FormatContent(content, entities);
         var want = "*Italic* and **bold**";
         Assert.Equal(want, got);
     }
@@ -69,7 +68,7 @@ public class ServiceTests
             new MessageEntity { Type = MessageEntityType.Italic, Offset = 5, Length = 4 },
         };
 
-        var got = Service.FormatContent(content, entities);
+        var got = MemosUtils.FormatContent(content, entities);
         var want = "**Overlap** test";
         Assert.Equal(want, got);
     }

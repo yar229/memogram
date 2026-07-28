@@ -1,5 +1,4 @@
-using Memogram;
-using Xunit;
+﻿using Xunit;
 
 namespace Memogram.Tests;
 
@@ -10,7 +9,7 @@ public class UtilTests
     [InlineData("memos/some-uuid", "some-uuid")]
     public void ExtractMemoUidFromName_ValidName_ReturnsUid(string name, string expected)
     {
-        Assert.Equal(expected, Util.ExtractMemoUidFromName(name));
+        Assert.Equal(expected, MemosUtils.ExtractMemoUidFromName(name));
     }
 
     [Theory]
@@ -20,6 +19,6 @@ public class UtilTests
     [InlineData("/abc")]
     public void ExtractMemoUidFromName_InvalidName_ThrowsArgumentException(string name)
     {
-        Assert.Throws<ArgumentException>(() => Util.ExtractMemoUidFromName(name));
+        Assert.Throws<ArgumentException>(() => MemosUtils.ExtractMemoUidFromName(name));
     }
 }

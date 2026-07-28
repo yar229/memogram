@@ -1,10 +1,11 @@
-using Memogram.Clients.Memos;
+﻿using Memogram.Clients.Memos;
 using Memogram.Clients.Memos.Models;
+using Memogram.Configs;
 using Memogram.Store;
 using MimeDetective;
 using System.Collections.Concurrent;
 using System.Net;
-using System.Text;
+using System.Net.Mime;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Telegram.Bot;
@@ -21,11 +22,11 @@ public partial class Service
     private readonly TelegramBotClient _bot;
     private readonly Task<Telegram.Bot.Types.User> _botUser;
 
-    private readonly MemosClient _client;
+    private readonly MemosClient _memosClient;
     private readonly MemogramConfig _memogramConfig;
     private readonly TelegramConfig _telegramConfig;
     private readonly UserStore _store;
-    private readonly HttpClient _httpClient;
+    private readonly HttpClient _tgHttpClient;
 
     private readonly ConcurrentDictionary<string, Memo> _mediaGroupCache = new();
     private readonly object _mediaGroupMutex = new();
@@ -47,7 +48,7 @@ public partial class Service
             baseUrl = "http://" + baseUrl;
         }
 
-        _client = new MemosClient(baseUrl);
+        _memosClient = new MemosClient(baseUrl);
         _store = new UserStore(_memogramConfig.Data);
         _store.Init();
 
@@ -55,7 +56,7 @@ public partial class Service
 
         var handler = CreateHttpClientHandler(_telegramConfig.Proxy);
         var telegramHttpClient = new HttpClient(handler);
-        _httpClient = new HttpClient(handler);
+        _tgHttpClient = new HttpClient(handler);
 
         _bot = !string.IsNullOrEmpty(_telegramConfig.BotProxyAddr)
             ? new TelegramBotClient(new TelegramBotClientOptions(_telegramConfig.BotToken, _telegramConfig.BotProxyAddr), telegramHttpClient)
@@ -84,7 +85,7 @@ public partial class Service
 
         try
         {
-            _instanceProfile = await _client.GetInstanceProfileAsync(ct);
+            _instanceProfile = await _memosClient.GetInstanceProfileAsync(ct);
             Console.WriteLine($"Instance profile: {JsonSerializer.Serialize(_instanceProfile)}");
         }
         catch (Exception ex)
@@ -174,12 +175,12 @@ public partial class Service
         }
         if (entities.Length > 0)
         {
-            content = FormatContent(content, entities);
+            content = MemosUtils.FormatContent(content, entities);
         }
 
         if (message.ForwardOrigin is not null)
         {
-            content = PrependForwardedFrom(message.ForwardOrigin, content);
+            content = MemosUtils.PrependForwardedFrom(message.ForwardOrigin, content);
         }
 
         bool hasAttachment = message.Document is not null
@@ -193,7 +194,7 @@ public partial class Service
             return;
         }
 
-        var authClient = _client.WithAuthentication(accessToken!);
+        var authClient = _memosClient.WithAuthentication(accessToken!);
         Memo memo;
         try
         {
@@ -217,7 +218,7 @@ public partial class Service
             await ProcessFileMessage(authClient, bot, chatId, photo.FileId, memo, ct);
         }
 
-        var memoUid = Util.ExtractMemoUidFromName(memo.Name);
+        var memoUid = MemosUtils.ExtractMemoUidFromName(memo.Name);
         var baseUrl = _memogramConfig.ServerAddr;
         if (_instanceProfile?.InstanceUrl is { Length: > 0 })
         {
@@ -254,7 +255,7 @@ public partial class Service
             return;
         }
 
-        var authClient = _client.WithAuthentication(accessToken);
+        var authClient = _memosClient.WithAuthentication(accessToken);
         try
         {
             var user = await authClient.GetCurrentUserAsync(ct);
@@ -288,7 +289,7 @@ public partial class Service
             return;
         }
 
-        var authClient = _client.WithAuthentication(accessToken!);
+        var authClient = _memosClient.WithAuthentication(accessToken!);
         Clients.Memos.Models.User? user;
         try
         {
@@ -300,7 +301,7 @@ public partial class Service
             return;
         }
 
-        var filter = BuildMemoSearchFilter(searchString, user);
+        var filter = MemosUtils.BuildMemoSearchFilter(searchString, user);
         var memos = await authClient.ListMemosAsync(pageSize: 10, filter: filter, ct);
 
         if (memos.Count == 0)
@@ -330,7 +331,7 @@ public partial class Service
             return;
         }
 
-        var authClient = _client.WithAuthentication(accessToken!);
+        var authClient = _memosClient.WithAuthentication(accessToken!);
 
         var parts = data.Split(' ');
         if (parts.Length != 2)
@@ -383,7 +384,7 @@ public partial class Service
         }
 
         var pinnedMarker = memo.Pinned ? "📌" : "";
-        var memoUid = Util.ExtractMemoUidFromName(memo.Name);
+        var memoUid = MemosUtils.ExtractMemoUidFromName(memo.Name);
         var baseUrl = _memogramConfig.ServerAddr;
         if (_instanceProfile?.InstanceUrl is { Length: > 0 })
         {
@@ -430,13 +431,13 @@ public partial class Service
             var file = await bot.GetFile(fileId, cancellationToken: ct);
             var fileLink = $"https://api.telegram.org/file/bot{_telegramConfig.BotToken}/{file.FilePath}";
 
-            var response = await _httpClient.GetAsync(fileLink, ct);
+            var response = await _tgHttpClient.GetAsync(fileLink, ct);
             response.EnsureSuccessStatusCode();
 
             var bytes = await response.Content.ReadAsByteArrayAsync(ct);
-            var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+            var contentType = response.Content.Headers.ContentType?.MediaType ?? MediaTypeNames.Application.Octet; 
 
-            if (string.IsNullOrEmpty(contentType) || "application/octet-stream".Equals(contentType, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrEmpty(contentType) || MediaTypeNames.Application.Octet.Equals(contentType, StringComparison.OrdinalIgnoreCase))
             { 
                 var bestMatch = _contentInspector.Inspect(bytes).ByMimeType().FirstOrDefault();
                 if (null != bestMatch && !string.IsNullOrEmpty(bestMatch.MimeType))
@@ -470,119 +471,6 @@ public partial class Service
         });
     }
 
-    internal static string BuildMemoSearchFilter(string searchString, Clients.Memos.Models.User? user)
-    {
-        var filter = $"content.contains(\"{searchString}\")";
-        if (user is null)
-            return filter;
-
-        var creator = user.Name;
-        if (string.IsNullOrEmpty(creator) && !string.IsNullOrEmpty(user.Username))
-        {
-            creator = "users/" + user.Username;
-        }
-        if (string.IsNullOrEmpty(creator))
-            return filter;
-
-        return $"{filter} && creator == \"{creator}\"";
-    }
-
-    private static string PrependForwardedFrom(MessageOrigin origin, string content)
-    {
-        string originName = string.Empty;
-        string? originUsername = null;
-
-        switch (origin)
-        {
-            case MessageOriginUser userOrigin:
-                var user = userOrigin.SenderUser;
-                originName = string.IsNullOrEmpty(user.LastName)
-                    ? user.FirstName
-                    : $"{user.FirstName} {user.LastName}";
-                originUsername = user.Username;
-                break;
-            case MessageOriginHiddenUser hiddenOrigin:
-                originName = string.IsNullOrEmpty(hiddenOrigin.SenderUserName) ? "Hidden User" : hiddenOrigin.SenderUserName;
-                break;
-            case MessageOriginChat chatOrigin:
-                originName = chatOrigin.SenderChat.Title ?? string.Empty;
-                originUsername = chatOrigin.SenderChat.Username;
-                break;
-            case MessageOriginChannel channelOrigin:
-                originName = channelOrigin.Chat.Title ?? string.Empty;
-                originUsername = channelOrigin.Chat.Username;
-                break;
-        }
-
-        if (!string.IsNullOrEmpty(originUsername))
-        {
-            return $"⏩[{originName}](https://t.me/{originUsername})\n>{content}";
-        }
-        return $"⏩{originName}\n>{content}";
-    }
-
-    internal static string FormatContent(string content, MessageEntity[] entities)
-    {
-        var sorted = entities.OrderBy(e => e.Offset).ThenBy(e => e.Length).ToList();
-
-        var sb = new StringBuilder();
-        int cursor = 0;
-
-        foreach (var entity in sorted)
-        {
-            if (!IsSupportedEntity(entity.Type))
-                continue;
-
-            int start = entity.Offset;
-            int end = entity.Offset + entity.Length;
-
-            if (start < cursor)
-                continue;
-            if (start >= content.Length)
-                break;
-            if (end > content.Length)
-                end = content.Length;
-
-            sb.Append(content[cursor..start]);
-            var segment = content[start..end];
-            sb.Append(ApplyEntityFormatting(segment, entity));
-            cursor = end;
-        }
-
-        sb.Append(content[cursor..]);
-        return sb.ToString();
-    }
-
-    private static bool IsSupportedEntity(MessageEntityType? entityType)
-    {
-        return entityType is MessageEntityType.Url
-            or MessageEntityType.TextLink
-            or MessageEntityType.Bold
-            or MessageEntityType.Italic;
-    }
-
-    private static string ApplyEntityFormatting(string segment, MessageEntity entity)
-    {
-        if (string.IsNullOrWhiteSpace(segment))
-            return segment;
-
-        var match = EntityRegex().Match(segment);
-        if (!match.Success)
-            return segment;
-
-        var prefix = match.Groups[1].Value;
-        var core = match.Groups[2].Value;
-        var suffix = match.Groups[3].Value;
-
-        return entity.Type switch
-        {
-            MessageEntityType.Url => $"{prefix}[{core}]({core}){suffix}",
-            MessageEntityType.TextLink => $"{prefix}[{core}]({entity.Url}){suffix}",
-            MessageEntityType.Bold => $"{prefix}**{core}**{suffix}",
-            MessageEntityType.Italic => $"{prefix}*{core}*{suffix}",
-            _ => segment,
-        };
-    }
 
     private async Task SendError(ITelegramBotClient bot, long chatId, Exception ex, CancellationToken ct)
     {
