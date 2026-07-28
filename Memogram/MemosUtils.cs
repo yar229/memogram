@@ -17,12 +17,55 @@ public static partial class MemosUtils
         return parts[1];
     }
 
+    public static string PrepareMessageContent(Message message)
+    {
+        var content = message.Text;
+        var entities = message.Entities ?? Array.Empty<MessageEntity>();
+        if (!string.IsNullOrEmpty(message.Caption))
+        {
+            content = message.Caption;
+            entities = message.CaptionEntities ?? Array.Empty<MessageEntity>();
+        }
+        if (entities.Length > 0)
+        {
+            content = MemosUtils.FormatContent(content, entities);
+        }
+
+        if (message.ForwardOrigin is not null)
+            content = MemosUtils.PrependForwardedFrom(message.ForwardOrigin, content);
+
+        if (message.ReplyToMessage != null)
+            content = MemosUtils.PrependReplyToMessage(message.ReplyToMessage, content);
+
+        return content;
+    }
+
     public static string PrependForwardedFrom(MessageOrigin origin, string content)
+    {
+        return $"\n> {FormatUserstring(origin)}: {content}";
+    }
+
+    public static string PrependReplyToMessage(Message msg, string content)
+    {
+        return $"\n> {FormatUserstring(msg)}: {PrepareMessageContent(msg)} \n\n {content}";
+    }
+
+    internal static string FormatUserstring(Message msg)
+    {
+        var originName = string.IsNullOrEmpty(msg.From?.LastName)
+                ? msg.From?.FirstName
+                : $"{msg.From.FirstName} {msg.From.LastName}";
+
+        return FormatUserstring(originName, msg.From?.Username, msg.From?.IsBot);
+    }
+
+    internal static string FormatUserstring(MessageOrigin msg)
     {
         string originName = string.Empty;
         string? originUsername = null;
+        bool isBot;
 
-        switch (origin)
+        switch (msg)
         {
             case MessageOriginUser userOrigin:
                 var user = userOrigin.SenderUser;
@@ -30,6 +73,7 @@ public static partial class MemosUtils
                     ? user.FirstName
                     : $"{user.FirstName} {user.LastName}";
                 originUsername = user.Username;
+                isBot = user.IsBot;
                 break;
             case MessageOriginHiddenUser hiddenOrigin:
                 originName = string.IsNullOrEmpty(hiddenOrigin.SenderUserName) ? "Hidden User" : hiddenOrigin.SenderUserName;
@@ -43,12 +87,14 @@ public static partial class MemosUtils
                 originUsername = channelOrigin.Chat.Username;
                 break;
         }
-
-        if (!string.IsNullOrEmpty(originUsername))
-        {
-            return $"⏩[{originName}](https://t.me/{originUsername})\n>{content}";
-        }
-        return $"⏩{originName}\n>{content}";
+        return FormatUserstring(originName, originUsername);
+    }
+    internal static string FormatUserstring(string name, string username, bool? isBot = false)
+    {
+        string ava = isBot ?? false ? "🤖" : "👤";
+        if (!string.IsNullOrEmpty(username))
+            return $"{ava}[{name}](https://t.me/{username})";
+        return $"{ava}{name}";
     }
 
     internal static string FormatContent(string content, MessageEntity[] entities)

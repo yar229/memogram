@@ -166,22 +166,7 @@ public partial class Service
             return;
         }
 
-        var content = text;
-        var entities = message.Entities ?? Array.Empty<MessageEntity>();
-        if (!string.IsNullOrEmpty(message.Caption))
-        {
-            content = message.Caption;
-            entities = message.CaptionEntities ?? Array.Empty<MessageEntity>();
-        }
-        if (entities.Length > 0)
-        {
-            content = MemosUtils.FormatContent(content, entities);
-        }
-
-        if (message.ForwardOrigin is not null)
-        {
-            content = MemosUtils.PrependForwardedFrom(message.ForwardOrigin, content);
-        }
+        string content = MemosUtils.PrepareMessageContent(message);
 
         bool hasAttachment = message.Document is not null
             || message.Photo?.Length > 0
