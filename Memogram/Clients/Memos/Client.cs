@@ -1,5 +1,4 @@
-using Memogram.Clients.Memos.Models;
-using System.Buffers.Text;
+﻿using Memogram.Clients.Memos.Models;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -23,8 +22,6 @@ public class MemosClient
         var client = new HttpClient(handler);
         return new MemosClient(_baseUrl, client);
     }
-
-    private string Url(string path) => $"{_baseUrl}{path}";
 
     public async Task<InstanceProfile> GetInstanceProfileAsync(CancellationToken ct = default)
     {
@@ -129,4 +126,7 @@ public class MemosClient
             return await base.SendAsync(request, cancellationToken);
         }
     }
+
+    private string Url(string path)
+        => $"{_baseUrl}{path}";
 }

@@ -20,7 +20,7 @@ namespace Memogram;
 public partial class Service
 {
     private readonly TelegramBotClient _bot;
-    private readonly Task<Telegram.Bot.Types.User> _botUser;
+    private BotCommandHandler[] _botCommands;
 
     private readonly MemosClient _memosClient;
     private readonly MemogramConfig _memogramConfig;
@@ -61,8 +61,6 @@ public partial class Service
         _bot = !string.IsNullOrEmpty(_telegramConfig.BotProxyAddr)
             ? new TelegramBotClient(new TelegramBotClientOptions(_telegramConfig.BotToken, _telegramConfig.BotProxyAddr), telegramHttpClient)
             : new TelegramBotClient(_telegramConfig.BotToken, telegramHttpClient);
-        _botUser = _bot.GetMe();
-
 
         _contentInspector = new ContentInspectorBuilder()
         {
@@ -93,15 +91,16 @@ public partial class Service
             Console.WriteLine($"Warning: failed to get instance profile: {ex.Message}");
         }
 
+        _botCommands = [
+            new BotCommandHandler{Command = new BotCommand("/start", "Usage: /start <memos_user_access_token>"), Handler = StartHandler },
+            new BotCommandHandler{Command = new BotCommand("/search", "Usage: /search <what_to_search>"), Handler = SearchHandler } ];
+        await _bot.SetMyCommands(_botCommands.Select(bc => bc.Command));
+
         _bot.StartReceiving(
             HandleUpdateAsync,
             HandleErrorAsync,
-            new ReceiverOptions
-            {
-                AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery],
-            },
-            cancellationToken: ct
-        );
+            new ReceiverOptions { AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery] },
+            cancellationToken: ct );
 
         Console.WriteLine("Bot is listening...");
         await Task.Delay(Timeout.Infinite, ct);
@@ -147,18 +146,9 @@ public partial class Service
             return;
         }
 
-        var text = message.Text ?? string.Empty;
-
-        if (text.StartsWith("/start", StringComparison.Ordinal))
-        {
-            await StartHandler(bot, message, ct);
+        var processed = await ProcessBotCommand(bot, message, ct);
+        if (processed)
             return;
-        }
-        if (text.StartsWith("/search", StringComparison.Ordinal))
-        {
-            await SearchHandler(bot, message, ct);
-            return;
-        }
 
         if (!_store.TryGetUserAccessToken(from.Id, out var accessToken) || string.IsNullOrEmpty(accessToken))
         {
@@ -228,11 +218,31 @@ public partial class Service
         await bot.SetMessageReaction(chatId, message.Id, [likeReaction]);
     }
 
-    private async Task StartHandler(ITelegramBotClient bot, Message message, CancellationToken ct)
+    private async Task<bool> ProcessBotCommand(ITelegramBotClient bot, Message message, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(message.Text))
+            return false;
+
+        var entity = message.Entities?.FirstOrDefault(ent => ent.Type == MessageEntityType.BotCommand && ent.Offset == 0);
+        if (null == entity)
+            return false;
+
+        string fullCommand = message.Text.Substring(entity.Offset, entity.Length);
+        string cleanCommand = fullCommand.Split('@')[0].ToLower();
+        var command = _botCommands.FirstOrDefault(cmd => cmd.Command.Command == cleanCommand);
+        if (null == command)
+            return false;
+
+        string arguments = message.Text.Substring(entity.Offset + entity.Length).Trim();
+        await command.Handler(bot, message, arguments, ct);
+        return true;
+    }
+
+    public async Task StartHandler(ITelegramBotClient bot, Message message, string args, CancellationToken ct)
     {
         var chatId = message.Chat.Id;
         var userId = message.From!.Id;
-        var accessToken = (message.Text ?? "").Replace("/start", "", StringComparison.Ordinal).Trim();
+        var accessToken = args.Trim();
 
         if (string.IsNullOrEmpty(accessToken))
         {
@@ -253,14 +263,11 @@ public partial class Service
         }
     }
 
-    private async Task SearchHandler(ITelegramBotClient bot, Message message, CancellationToken ct)
+    private async Task SearchHandler(ITelegramBotClient bot, Message message, string args, CancellationToken ct)
     {
         var chatId = message.Chat.Id;
         var userId = message.From!.Id;
-        var username = (await _botUser).Username;
-        var searchString = (message.Text ?? "")
-            .Replace($"/search@{username}", "", StringComparison.OrdinalIgnoreCase)
-            .Replace("/search", "", StringComparison.OrdinalIgnoreCase).Trim();
+        var searchString = args;
 
         if (string.IsNullOrEmpty(searchString))
         {
