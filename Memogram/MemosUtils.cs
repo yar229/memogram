@@ -107,7 +107,7 @@ public static partial class MemosUtils
 
     private static string PrependForwardedFrom(MessageOrigin origin, string content)
     {
-        return $"\n> {FormatUserstring(origin)}: {content}";
+        return $"\n> {FormatUserstring(origin)}: {FormatContentAsQuote(content)}";
     }
 
     private static string PrependReplyToMessage(Message msg, string content)
@@ -122,6 +122,12 @@ public static partial class MemosUtils
                 : $"{msg.From.FirstName} {msg.From.LastName}";
 
         return FormatUserstring(originName, msg.From?.Username, msg.From?.IsBot);
+    }
+
+    private static string FormatContentAsQuote(string content)
+    {
+        return content.Replace("\n", "\n> ");
+
     }
 
     private static string FormatUserstring(MessageOrigin msg)
