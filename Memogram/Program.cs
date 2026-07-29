@@ -1,4 +1,4 @@
-using Memogram;
+﻿using Memogram;
 using Memogram.Configs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,6 +38,8 @@ try
                 telegram.Validate();
                 return telegram;
             });
+
+            services.AddSingleton<TelegramService>();
             services.AddSingleton<Service>();
         })
         .Build();

@@ -5,44 +5,42 @@ using Memogram.Store;
 using Microsoft.Extensions.Logging;
 using MimeDetective;
 using System.Collections.Concurrent;
-using System.Net;
 using System.Net.Mime;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Telegram.Bot;
-using Telegram.Bot.Exceptions;
-using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using Telegram.Bot.Types.ReplyMarkups;
 
 namespace Memogram;
 
 public partial class Service
 {
-    private readonly TelegramBotClient _bot;
-    private BotCommandHandler[] _botCommands;
+    //private readonly TelegramBotClient _bot;
+    //private BotCommandHandler[] _botCommands;
 
     private readonly MemosClient _memosClient;
     private readonly MemogramConfig _memogramConfig;
-    private readonly TelegramConfig _telegramConfig;
+    //private readonly TelegramConfig _telegramConfig;
     private readonly UserStore _store;
-    private readonly HttpClient _tgHttpClient;
+    //private readonly HttpClient _tgHttpClient;
     private readonly ILogger<Service> _logger;
-
+    private readonly TelegramService _tgService;
     private readonly ConcurrentDictionary<string, Memo> _mediaGroupCache = new();
     private readonly object _mediaGroupMutex = new();
 
     private InstanceProfile? _instanceProfile;
-    private readonly HashSet<string> _allowedUsernames;
+    //private readonly HashSet<string> _allowedUsernames;
 
     private readonly IContentInspector _contentInspector;
 
-    public Service(MemogramConfig memogramConfig, TelegramConfig telegramConfig, ILogger<Service> logger, ILoggerFactory loggerFactory)
+    public Service(MemogramConfig memogramConfig, /*TelegramConfig telegramConfig,*/ ILogger<Service> logger, ILoggerFactory loggerFactory,
+        TelegramService tgService)
     {
         _memogramConfig = memogramConfig;
-        _telegramConfig = telegramConfig;
+        //_telegramConfig = telegramConfig;
         _logger = logger;
+
+        _tgService = tgService;
 
         var baseUrl = _memogramConfig.ServerAddr;
         baseUrl = baseUrl.Replace("dns:", "", StringComparison.Ordinal);
@@ -55,15 +53,15 @@ public partial class Service
         _store = new UserStore(_memogramConfig.Data);
         _store.Init();
 
-        _allowedUsernames = ParseAllowedUsernames(_telegramConfig.AllowedUsernames);
+        //_allowedUsernames = ParseAllowedUsernames(_telegramConfig.AllowedUsernames);
 
-        var handler = CreateHttpClientHandler(_telegramConfig.Proxy);
-        var telegramHttpClient = new HttpClient(handler);
-        _tgHttpClient = new HttpClient(handler);
+        //var handler = CreateHttpClientHandler(_telegramConfig.Proxy);
+        //var telegramHttpClient = new HttpClient(handler);
+        //_tgHttpClient = new HttpClient(handler);
 
-        _bot = !string.IsNullOrEmpty(_telegramConfig.BotProxyAddr)
-            ? new TelegramBotClient(new TelegramBotClientOptions(_telegramConfig.BotToken, _telegramConfig.BotProxyAddr), telegramHttpClient)
-            : new TelegramBotClient(_telegramConfig.BotToken, telegramHttpClient);
+        //_bot = !string.IsNullOrEmpty(_telegramConfig.BotProxyAddr)
+        //    ? new TelegramBotClient(new TelegramBotClientOptions(_telegramConfig.BotToken, _telegramConfig.BotProxyAddr), telegramHttpClient)
+        //    : new TelegramBotClient(_telegramConfig.BotToken, telegramHttpClient);
 
         _contentInspector = new ContentInspectorBuilder()
         {
@@ -71,18 +69,18 @@ public partial class Service
         }.Build();
     }
 
-    private static HttpClientHandler CreateHttpClientHandler(string proxyUrl)
-    {
-        if (string.IsNullOrWhiteSpace(proxyUrl))
-            return new HttpClientHandler();
+    //private static HttpClientHandler CreateHttpClientHandler(string proxyUrl)
+    //{
+    //    if (string.IsNullOrWhiteSpace(proxyUrl))
+    //        return new HttpClientHandler();
 
-        var proxy = new WebProxy(proxyUrl);
-        return new HttpClientHandler { Proxy = proxy, UseProxy = true };
-    }
+    //    var proxy = new WebProxy(proxyUrl);
+    //    return new HttpClientHandler { Proxy = proxy, UseProxy = true };
+    //}
 
     public async Task Start(CancellationToken ct = default)
     {
-        _logger.LogInformation("Memogram started");
+        _logger.LogInformation("Memogram starting...");
 
         try
         {
@@ -94,64 +92,43 @@ public partial class Service
             _logger.LogWarning(ex, "Failed to get instance profile");
         }
 
-        _botCommands = [
-            new BotCommandHandler{Command = new BotCommand("/start", "Usage: /start <memos_user_access_token>"), Handler = StartHandler },
-            new BotCommandHandler{Command = new BotCommand("/search", "Usage: /search <what_to_search>"), Handler = SearchHandler } ];
-        await _bot.SetMyCommands(_botCommands.Select(bc => bc.Command));
+        //_botCommands = [
+        //    new BotCommandHandler{Command = new BotCommand("/start", "Usage: /start <memos_user_access_token>"), Handler = StartHandler },
+        //    new BotCommandHandler{Command = new BotCommand("/search", "Usage: /search <what_to_search>"), Handler = SearchHandler } ];
+        //await _bot.SetMyCommands(_botCommands.Select(bc => bc.Command));
 
-        _bot.StartReceiving(
-            HandleUpdateAsync,
-            HandleErrorAsync,
-            new ReceiverOptions { AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery] },
-            cancellationToken: ct );
+        //_bot.StartReceiving(
+        //    HandleUpdateAsync,
+        //    HandleErrorAsync,
+        //    new ReceiverOptions { AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery] },
+        //    cancellationToken: ct );
 
-        _logger.LogInformation("Bot is listening");
+        _ = _tgService.Start(StartHandler, SearchHandler, HandleMessageAsync, HandleCallbackQueryAsync, ct);
+
         await Task.Delay(Timeout.Infinite, ct);
     }
 
-    private async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken ct)
-    {
-        try
-        {
-            if (update.CallbackQuery is { } callbackQuery)
-            {
-                await HandleCallbackQueryAsync(bot, callbackQuery, ct);
-                return;
-            }
 
-            if (update.Message is not { } message || message.From is not { } from)
-                return;
-
-            if (string.IsNullOrEmpty(message.Text) && message.Document is null && message.Photo?.Length == 0 && message.Voice is null && message.Video is null && string.IsNullOrEmpty(message.Caption))
-                return;
-
-            await HandleMessageAsync(bot, message, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error handling update");
-        }
-    }
 
     private async Task HandleMessageAsync(ITelegramBotClient bot, Message message, CancellationToken ct)
     {
         var chatId = message.Chat.Id;
         var from = message.From!;
 
-        if (!IsUserAllowed(from.Username))
-        {
-            if (string.IsNullOrEmpty(from.Username))
-            {
-                await SendError(bot, chatId, new InvalidOperationException("Your account must have a username to use this bot"), ct);
-                return;
-            }
-            await SendError(bot, chatId, new InvalidOperationException($"Your account {from.Username} is not allowed to use this bot"), ct);
-            return;
-        }
+        //if (!IsUserAllowed(from.Username))
+        //{
+        //    if (string.IsNullOrEmpty(from.Username))
+        //    {
+        //        await SendError(bot, chatId, new InvalidOperationException("Your account must have a username to use this bot"), ct);
+        //        return;
+        //    }
+        //    await SendError(bot, chatId, new InvalidOperationException($"Your account {from.Username} is not allowed to use this bot"), ct);
+        //    return;
+        //}
 
-        var processed = await ProcessBotCommand(bot, message, ct);
-        if (processed)
-            return;
+        //var processed = await ProcessBotCommand(bot, message, ct);
+        //if (processed)
+        //    return;
 
         if (!_store.TryGetUserAccessToken(from.Id, out var accessToken) || string.IsNullOrEmpty(accessToken))
         {
@@ -203,45 +180,11 @@ public partial class Service
             baseUrl = _instanceProfile.InstanceUrl;
         }
 
-        if (string.IsNullOrEmpty(_telegramConfig.OnlyLikeSavedMessageWith))
-        {
-            var inlineKeyboard = BuildKeyboard(memo);
-            await bot.SendMessage(
-                chatId,
-                $"Content saved as {memo.Visibility} with [{memo.Name}]({baseUrl}/memos/{memoUid})",
-                parseMode: ParseMode.Markdown,
-                disableNotification: true,
-                replyParameters: new ReplyParameters { MessageId = message.MessageId },
-                replyMarkup: inlineKeyboard,
-                cancellationToken: ct
-            );
-        }
-        else
-        {
-            var likeReaction = new ReactionTypeEmoji { Emoji = _telegramConfig.OnlyLikeSavedMessageWith };
-            await bot.SetMessageReaction(chatId, message.Id, [likeReaction]);
-        }
+        string msg = $"Content saved as {memo.Visibility} with [{memo.Name}]({baseUrl}/memos/{memoUid})";
+        await _tgService.SendMessageSaved(bot, message, chatId, memo, msg, ct);
     }
 
-    private async Task<bool> ProcessBotCommand(ITelegramBotClient bot, Message message, CancellationToken ct)
-    {
-        if (string.IsNullOrEmpty(message.Text))
-            return false;
 
-        var entity = message.Entities?.FirstOrDefault(ent => ent.Type == MessageEntityType.BotCommand && ent.Offset == 0);
-        if (null == entity)
-            return false;
-
-        string fullCommand = message.Text.Substring(entity.Offset, entity.Length);
-        string cleanCommand = fullCommand.Split('@')[0].ToLower();
-        var command = _botCommands.FirstOrDefault(cmd => cmd.Command.Command == cleanCommand);
-        if (null == command)
-            return false;
-
-        string arguments = message.Text.Substring(entity.Offset + entity.Length).Trim();
-        await command.Handler(bot, message, arguments, ct);
-        return true;
-    }
 
     public async Task StartHandler(ITelegramBotClient bot, Message message, string args, CancellationToken ct)
     {
@@ -396,7 +339,7 @@ public partial class Service
             baseUrl = _instanceProfile.InstanceUrl;
         }
 
-        var inlineKeyboard = BuildKeyboard(memo);
+        var inlineKeyboard = _tgService.BuildKeyboard(memo);
         await bot.EditMessageText(
             chatId,
             messageId,
@@ -433,98 +376,91 @@ public partial class Service
     {
         try
         {
-            var file = await bot.GetFile(fileId, cancellationToken: ct);
-            var fileLink = $"https://api.telegram.org/file/bot{_telegramConfig.BotToken}/{file.FilePath}";
+            var file = await _tgService.GetFile(bot, fileId, ct);
 
-            var response = await _tgHttpClient.GetAsync(fileLink, ct);
-            response.EnsureSuccessStatusCode();
-
-            var bytes = await response.Content.ReadAsByteArrayAsync(ct);
-            var contentType = response.Content.Headers.ContentType?.MediaType ?? MediaTypeNames.Application.Octet; 
-
-            if (string.IsNullOrEmpty(contentType) || MediaTypeNames.Application.Octet.Equals(contentType, StringComparison.OrdinalIgnoreCase))
-            { 
-                var bestMatch = _contentInspector.Inspect(bytes).ByMimeType().FirstOrDefault();
+            if (string.IsNullOrEmpty(file.ContentType) || MediaTypeNames.Application.Octet.Equals(file.ContentType, StringComparison.OrdinalIgnoreCase))
+            {
+                var bestMatch = _contentInspector.Inspect(file.Content).ByMimeType().FirstOrDefault();
                 if (null != bestMatch && !string.IsNullOrEmpty(bestMatch.MimeType))
-                    contentType = bestMatch.MimeType;
+                    file.ContentType = bestMatch.MimeType;
             }
 
             await memosClient.CreateAttachmentAsync(
                 filename: Path.GetFileName(file.FilePath),
-                contentType: contentType,
-                content: bytes,
+                contentType: file.ContentType,
+                content: file.Content,
                 memoName: memo.Name,
                 ct: ct
             );
         }
         catch (Exception ex)
         {
-            await SendError(bot, chatId, new InvalidOperationException($"Failed to save attachment: {ex.Message}"), ct);
+            await _tgService.SendError(chatId, new InvalidOperationException($"Failed to save attachment: {ex.Message}"), ct);
         }
     }
 
-    private static InlineKeyboardMarkup BuildKeyboard(Memo memo)
-    {
-        return new InlineKeyboardMarkup(new[]
-        {
-            new[]
-            {
-                InlineKeyboardButton.WithCallbackData("Public", $"public {memo.Name}"),
-                InlineKeyboardButton.WithCallbackData("Private", $"private {memo.Name}"),
-                InlineKeyboardButton.WithCallbackData("Pin", $"pin {memo.Name}"),
-            }
-        });
-    }
+    //private static async Task<(string FilePath, byte[] Content, string ContentType)> GetFile(ITelegramBotClient bot, string fileId, CancellationToken ct)
+    //{
+    //    var file = await bot.GetFile(fileId, cancellationToken: ct);
+    //    var fileLink = $"https://api.telegram.org/file/bot{_telegramConfig.BotToken}/{file.FilePath}";
+
+    //    var response = await _tgHttpClient.GetAsync(fileLink, ct);
+    //    response.EnsureSuccessStatusCode();
+
+    //    var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+    //    var contentType = response.Content.Headers.ContentType?.MediaType ?? MediaTypeNames.Application.Octet;
+    //    return (file.FilePath, bytes, contentType);
+    //}
+
+    //private static InlineKeyboardMarkup BuildKeyboard(Memo memo)
+    //{
+    //    return new InlineKeyboardMarkup(new[]
+    //    {
+    //        new[]
+    //        {
+    //            InlineKeyboardButton.WithCallbackData("Public", $"public {memo.Name}"),
+    //            InlineKeyboardButton.WithCallbackData("Private", $"private {memo.Name}"),
+    //            InlineKeyboardButton.WithCallbackData("Pin", $"pin {memo.Name}"),
+    //        }
+    //    });
+    //}
+
+    //private async Task SendError(ITelegramBotClient bot, long chatId, Exception ex, CancellationToken ct)
+    //{
+    //    _logger.LogError(ex, "{Message}", ex.Message);
+    //    try
+    //    {
+    //        await bot.SendMessage(chatId, $"Error: {ex.Message}", cancellationToken: ct);
+    //    }
+    //    catch
+    //    {
+    //        _logger.LogError(ex, "Failed to send error to telegram: {Message}", ex.Message);
+    //    }
+    //}
+
+    //private static HashSet<string> ParseAllowedUsernames(string raw)
+    //{
+    //    var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    //    foreach (var entry in raw.Split(','))
+    //    {
+    //        var trimmed = entry.Trim().ToLowerInvariant();
+    //        if (!string.IsNullOrEmpty(trimmed))
+    //        {
+    //            allowed.Add(trimmed);
+    //        }
+    //    }
+    //    return allowed;
+    //}
+
+    //private bool IsUserAllowed(string? username)
+    //{
+    //    if (_allowedUsernames.Count == 0)
+    //        return true;
+    //    if (string.IsNullOrEmpty(username))
+    //        return false;
+    //    return _allowedUsernames.Contains(username.Trim().ToLowerInvariant());
+    //}
 
 
-    private async Task SendError(ITelegramBotClient bot, long chatId, Exception ex, CancellationToken ct)
-    {
-        _logger.LogError(ex, "{Message}", ex.Message);
-        try
-        {
-            await bot.SendMessage(chatId, $"Error: {ex.Message}", cancellationToken: ct);
-        }
-        catch
-        {
-            _logger.LogError(ex, "Failed to send error to telegram: {Message}", ex.Message);
-        }
-    }
-
-    private static HashSet<string> ParseAllowedUsernames(string raw)
-    {
-        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var entry in raw.Split(','))
-        {
-            var trimmed = entry.Trim().ToLowerInvariant();
-            if (!string.IsNullOrEmpty(trimmed))
-            {
-                allowed.Add(trimmed);
-            }
-        }
-        return allowed;
-    }
-
-    private bool IsUserAllowed(string? username)
-    {
-        if (_allowedUsernames.Count == 0)
-            return true;
-        if (string.IsNullOrEmpty(username))
-            return false;
-        return _allowedUsernames.Contains(username.Trim().ToLowerInvariant());
-    }
-
-    private Task HandleErrorAsync(ITelegramBotClient bot, Exception exception, CancellationToken ct)
-    {
-        switch (exception)
-        {
-            case ApiRequestException api:
-                _logger.LogError(api, "Telegram API Error: [{Code}] {Message}", api.ErrorCode, api.Message);
-                break;
-            default:
-                _logger.LogError(exception, "Unknown error in bot update");
-                break;
-        }
-        return Task.CompletedTask;
-    }
 
 }
