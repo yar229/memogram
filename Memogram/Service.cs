@@ -33,8 +33,8 @@ public partial class Service
 
     private readonly IContentInspector _contentInspector;
 
-    public Service(LocalStorageConfig localStorageConfig, /*TelegramConfig telegramConfig,*/ ILogger<Service> logger, ILoggerFactory loggerFactory,
-        TelegramService tgService, MemogramService memoService)
+    public Service(UserStore store, TelegramService tgService, MemogramService memoService,
+        ILogger<Service> logger)
     {
         //_memogramConfig = memogramConfig;
         //_telegramConfig = telegramConfig;
@@ -52,7 +52,8 @@ public partial class Service
         //}
         //_memosClient = new MemosClient(baseUrl, logger: loggerFactory.CreateLogger<MemosClient>());
 
-        _store = new UserStore(localStorageConfig.Filename);
+        //_store = new UserStore(localStorageConfig.Filename);
+        _store = store;
         _store.Init();
 
         //_allowedUsernames = ParseAllowedUsernames(_telegramConfig.AllowedUsernames);

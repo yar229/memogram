@@ -1,11 +1,21 @@
+﻿using Memogram.Clients.Memos;
+using Memogram.Configs;
+using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 
 namespace Memogram.Store;
 
 public class UserStore
 {
+    public UserStore(LocalStorageConfig config, ILogger<UserStore> logger)
+    {
+        _dataPath = config.Filename;
+        _logger = logger;
+    }
+
     private readonly string _dataPath;
     private readonly ConcurrentDictionary<long, string> _userAccessTokenCache = new();
+    private readonly ILogger<UserStore> _logger;
 
     public UserStore(string dataPath)
     {
