@@ -304,8 +304,16 @@ public partial class Service
         {
             foreach (var memo in memos)
             {
-                var tgMessage = memo.Name + "\n" + memo.Content;
-                await bot.SendMessage(chatId, tgMessage, cancellationToken: ct);
+                string trimmedContent = memo.Content.Length > 200
+                    ? $"{memo.Content[..200]}..."
+                    : memo.Content;
+                string tgMessage = $"[🔗]({_memogramConfig.ServerAddr}/{memo.Name}) {trimmedContent.TrimEnd()}";
+
+                await bot.SendMessage(chatId, tgMessage, 
+                    parseMode: ParseMode.Markdown, 
+                    disableNotification: true,
+                    linkPreviewOptions: LinkPreviewOptions.Disabled,
+                    cancellationToken: ct);
             }
         }
     }
