@@ -151,6 +151,13 @@ public class TelegramService
             case ApiRequestException api:
                 _logger.LogError(api, "Telegram API Error: [{Code}] {Message}", api.ErrorCode, api.Message);
                 break;
+            case RequestException rex:
+                if (rex.InnerException is HttpRequestException hrex && hrex.HttpRequestError == HttpRequestError.ResponseEnded &&
+                    hrex.InnerException is HttpIOException iorex && iorex.HttpRequestError == HttpRequestError.ResponseEnded)
+                    _logger.LogTrace(rex, rex.Message);
+                else
+                    _logger.LogError(rex, rex.Message);
+                break;
             default:
                 _logger.LogError(exception, "Unknown error in bot update");
                 break;
