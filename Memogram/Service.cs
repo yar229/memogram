@@ -200,7 +200,7 @@ public partial class Service
             baseUrl = _instanceProfile.InstanceUrl;
         }
 
-        if (!string.IsNullOrEmpty(_memogramConfig.OnlyLikeSavedMessageWith))
+        if (string.IsNullOrEmpty(_telegramConfig.OnlyLikeSavedMessageWith))
         {
             var inlineKeyboard = BuildKeyboard(memo);
             await bot.SendMessage(
@@ -213,9 +213,11 @@ public partial class Service
                 cancellationToken: ct
             );
         }
-
-        var likeReaction = new ReactionTypeEmoji { Emoji = "✍️" };
-        await bot.SetMessageReaction(chatId, message.Id, [likeReaction]);
+        else
+        {
+            var likeReaction = new ReactionTypeEmoji { Emoji = _telegramConfig.OnlyLikeSavedMessageWith };
+            await bot.SetMessageReaction(chatId, message.Id, [likeReaction]);
+        }
     }
 
     private async Task<bool> ProcessBotCommand(ITelegramBotClient bot, Message message, CancellationToken ct)

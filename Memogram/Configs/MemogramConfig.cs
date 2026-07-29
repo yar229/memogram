@@ -7,8 +7,6 @@ public class MemogramConfig
 
     public string[] TagsToAdd { get; set; } = Array.Empty<string>();
 
-    public string OnlyLikeSavedMessageWith { get;set; } = string.Empty;
-
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(ServerAddr))

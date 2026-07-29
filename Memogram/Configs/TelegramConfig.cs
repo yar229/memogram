@@ -7,6 +7,8 @@ public class TelegramConfig
     public string Proxy { get; set; } = string.Empty;
     public string AllowedUsernames { get; set; } = string.Empty;
 
+    public string OnlyLikeSavedMessageWith { get; set; } = string.Empty;
+
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(BotToken))
