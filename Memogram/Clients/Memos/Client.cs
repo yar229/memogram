@@ -1,4 +1,8 @@
 ﻿using Memogram.Clients.Memos.Models;
+using Microsoft.Extensions.Logging;
+using Polly;
+using Polly.Retry;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -9,30 +13,65 @@ public class MemosClient
 {
     private readonly string _baseUrl;
     private readonly HttpClient _httpClient;
+    private readonly ResiliencePipeline<HttpResponseMessage> _retryPipeline;
+    private readonly ILogger<MemosClient>? _logger;
 
-    public MemosClient(string baseUrl, HttpClient? httpClient = null)
+    private const int MaxRetryAttempts = 3;
+
+    public MemosClient(string baseUrl, HttpClient? httpClient = null, ILogger<MemosClient>? logger = null)
     {
         _baseUrl = baseUrl.TrimEnd('/');
         _httpClient = httpClient ?? new HttpClient();
+        _logger = logger;
+
+        _retryPipeline = new ResiliencePipelineBuilder<HttpResponseMessage>()
+            .AddRetry(new RetryStrategyOptions<HttpResponseMessage>
+            {
+                MaxRetryAttempts = MaxRetryAttempts,
+                Delay = TimeSpan.FromSeconds(1),
+                BackoffType = DelayBackoffType.Exponential,
+                UseJitter = true,
+                ShouldHandle = new PredicateBuilder<HttpResponseMessage>()
+                    .Handle<HttpRequestException>()
+                    .Handle<TaskCanceledException>()
+                    .HandleResult(r => r.StatusCode is
+                        HttpStatusCode.RequestTimeout or
+                        HttpStatusCode.TooManyRequests or
+                        >= HttpStatusCode.InternalServerError),
+                OnRetry = args =>
+                {
+                    var reason = args.Outcome.Exception is { } ex
+                        ? ex.Message
+                        : args.Outcome.Result is { } res
+                            ? $"HTTP {(int)res.StatusCode}"
+                            : "Unknown";
+
+                    _logger?.LogWarning("Request failed ({Reason}). Retry {Attempt}/{MaxRetries} in {Delay:F1}s...",
+                        reason, args.AttemptNumber + 1, MaxRetryAttempts, args.RetryDelay.TotalSeconds);
+
+                    return ValueTask.CompletedTask;
+                }
+            })
+            .Build();
     }
 
     public MemosClient WithAuthentication(string accessToken)
     {
         var handler = new AuthenticatedHandler(accessToken);
         var client = new HttpClient(handler);
-        return new MemosClient(_baseUrl, client);
+        return new MemosClient(_baseUrl, client, _logger);
     }
 
     public async Task<InstanceProfile> GetInstanceProfileAsync(CancellationToken ct = default)
     {
-        var response = await _httpClient.GetAsync(Url("/api/v1/instance/profile"), ct);
+        var response = await RetryAsync(ct2 => _httpClient.GetAsync(Url("/api/v1/instance/profile"), ct2), ct);
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<InstanceProfile>(cancellationToken: ct))!;
     }
 
     public async Task<User> GetCurrentUserAsync(CancellationToken ct = default)
     {
-        var response = await _httpClient.GetAsync(Url("/api/v1/auth/me"), ct);
+        var response = await RetryAsync(ct2 => _httpClient.GetAsync(Url("/api/v1/auth/me"), ct2), ct);
         response.EnsureSuccessStatusCode();
         var wrapper = await response.Content.ReadFromJsonAsync<UserWrapper>(cancellationToken: ct);
         return wrapper?.User ?? throw new InvalidOperationException("No user in response");
@@ -45,7 +84,7 @@ public class MemosClient
         if (doAddTags)
         {
             sb = new StringBuilder(content.Length + 10);
-            foreach (var tag in tags)
+            foreach (var tag in tags!)
                 sb.Append($"#{tag} ");
             sb.Append(content);
         }
@@ -55,7 +94,7 @@ public class MemosClient
             Content = doAddTags ? sb!.ToString() : content,
             Visibility = visibility,
         };
-        var response = await _httpClient.PostAsJsonAsync(Url("/api/v1/memos"), body, ct);
+        var response = await RetryAsync(ct2 => _httpClient.PostAsJsonAsync(Url("/api/v1/memos"), body, ct2), ct);
         response.EnsureSuccessStatusCode();
         var memo = await response.Content.ReadFromJsonAsync<Memo>(cancellationToken: ct);
         return memo ?? throw new InvalidOperationException("No memo in response");
@@ -63,7 +102,7 @@ public class MemosClient
 
     public async Task<Memo> GetMemoAsync(string name, CancellationToken ct = default)
     {
-        var response = await _httpClient.GetAsync(Url($"/api/v1/{name}"), ct);
+        var response = await RetryAsync(ct2 => _httpClient.GetAsync(Url($"/api/v1/{name}"), ct2), ct);
         response.EnsureSuccessStatusCode();
         var wrapper = await response.Content.ReadFromJsonAsync<Memo>(cancellationToken: ct);
         return wrapper ?? throw new InvalidOperationException("No memo in response");
@@ -77,7 +116,7 @@ public class MemosClient
             Visibility = memo.Visibility,
             Pinned = memo.Pinned,
         };
-        var response = await _httpClient.PatchAsJsonAsync(Url($"/api/v1/{memo.Name}"), body, ct);
+        var response = await RetryAsync(ct2 => _httpClient.PatchAsJsonAsync(Url($"/api/v1/{memo.Name}"), body, ct2), ct);
         response.EnsureSuccessStatusCode();
         var wrapper = await response.Content.ReadFromJsonAsync<Memo>(cancellationToken: ct);
         return wrapper ?? throw new InvalidOperationException("No memo in response");
@@ -90,7 +129,7 @@ public class MemosClient
         {
             url += $"&filter={Uri.EscapeDataString(filter)}";
         }
-        var response = await _httpClient.GetAsync(Url(url), ct);
+        var response = await RetryAsync(ct2 => _httpClient.GetAsync(Url(url), ct2), ct);
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<ListMemosResponse>(cancellationToken: ct);
         return result?.Memos ?? new List<Memo>();
@@ -105,10 +144,16 @@ public class MemosClient
             Type = contentType,
             Content = content
         };
-        var response = await _httpClient.PostAsJsonAsync(Url("/api/v1/attachments"), body, ct);
+        var response = await RetryAsync(ct2 => _httpClient.PostAsJsonAsync(Url("/api/v1/attachments"), body, ct2), ct);
         response.EnsureSuccessStatusCode();
         var res = await response.Content.ReadFromJsonAsync<CreateAttachmentResponse>(cancellationToken: ct);
         return res ?? throw new InvalidOperationException("No attachment in response");
+    }
+
+    private async Task<HttpResponseMessage> RetryAsync(Func<CancellationToken, Task<HttpResponseMessage>> request, CancellationToken ct)
+    {
+        return await _retryPipeline.ExecuteAsync(
+            ct2 => new ValueTask<HttpResponseMessage>(request(ct2)), ct);
     }
 
     private class AuthenticatedHandler : DelegatingHandler

@@ -38,7 +38,7 @@ public partial class Service
 
     private readonly IContentInspector _contentInspector;
 
-    public Service(MemogramConfig memogramConfig, TelegramConfig telegramConfig, ILogger<Service> logger)
+    public Service(MemogramConfig memogramConfig, TelegramConfig telegramConfig, ILogger<Service> logger, ILoggerFactory loggerFactory)
     {
         _memogramConfig = memogramConfig;
         _telegramConfig = telegramConfig;
@@ -51,7 +51,7 @@ public partial class Service
             baseUrl = "http://" + baseUrl;
         }
 
-        _memosClient = new MemosClient(baseUrl);
+        _memosClient = new MemosClient(baseUrl, logger: loggerFactory.CreateLogger<MemosClient>());
         _store = new UserStore(_memogramConfig.Data);
         _store.Init();
 
