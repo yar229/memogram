@@ -1,12 +1,27 @@
-﻿using System.Text;
+﻿using Memogram.Clients.Memos;
+using Memogram.Clients.Memos.Models;
+using Memogram.Configs;
+using Microsoft.Extensions.Logging;
+using MimeDetective;
+using System.Collections.Concurrent;
+using System.Net.Mime;
+using System.Text;
 using System.Text.RegularExpressions;
+using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
 namespace Memogram;
 
-public static partial class MemosUtils
+public partial class MemogramService
 {
+    public class FileInfo
+    {
+        public string FilePath { get; set; }
+        public byte[] Content { get; set; }
+        public string ContentType { get; set; }
+    }
+
     private static readonly Dictionary<MessageEntityType, Func<string, string, string, MessageEntity, string>> EntityConverters = new()
     {
         [MessageEntityType.Url] = (string p, string c, string s, MessageEntity entity) => $"{p}[{c}]({c}){s}",
@@ -22,10 +37,128 @@ public static partial class MemosUtils
         [MessageEntityType.Pre] = (string p, string c, string s, MessageEntity entity) => $"{p}```\n{c}\n```{s}",
         [MessageEntityType.Mention] = (string p, string c, string s, MessageEntity entity) => $"{p}[{c}](https://t.me/{c[1..]}){s}",
     };
+    private readonly MemosClient _memosClient;
+    private readonly MemogramConfig _config;
+    private readonly ILogger<MemogramService> _logger;
 
-    public static string PrepareMessageContent(Message message)
+    private readonly object _mediaGroupMutex = new();
+    private readonly ConcurrentDictionary<string, Memo> _mediaGroupCache = new();
+
+
+    public InstanceProfile? InstanceProfile { get; set; }
+    
+
+    public MemogramService(MemosClient memosClient,  MemogramConfig config, ILogger<MemogramService> logger)
     {
-        var content = message.Text;
+        _memosClient = memosClient;
+        _config = config;
+        _logger = logger;
+
+        //var baseUrl = _config.ServerAddr;
+        //baseUrl = baseUrl.Replace("dns:", "", StringComparison.Ordinal);
+        //if (!baseUrl.StartsWith("http://", StringComparison.Ordinal) && !baseUrl.StartsWith("https://", StringComparison.Ordinal))
+        //{
+        //    baseUrl = "http://" + baseUrl;
+        //}
+        //_memosClient = new MemosClient(baseUrl, logger: loggerFactory.CreateLogger<MemosClient>());
+
+        InstanceProfile = GetInstanceProfileAsync(CancellationToken.None).Result; //TODO:!!!!
+    }
+
+
+    public string BaseUrl
+    {
+        get
+        {
+            var baseUrl = _config.ServerAddr;
+            if (InstanceProfile?.InstanceUrl is { Length: > 0 })
+                baseUrl = InstanceProfile.InstanceUrl;
+            return baseUrl;
+        }
+    }
+
+
+    public Task<Clients.Memos.Models.User> GetCurrentUserAsync(string accessToken, CancellationToken ct = default)
+    {
+        var memoClient = _memosClient.WithAuthentication(accessToken);
+        return memoClient.GetCurrentUserAsync(ct);
+    }
+
+    public Task<Memo> GetMemoAsync(string accessToken, string name, CancellationToken ct = default)
+    {
+        var memoClient = _memosClient.WithAuthentication(accessToken);
+        return memoClient.GetMemoAsync(name, ct);
+    }
+
+    public Task<Memo> UpdateMemoAsync(string accessToken, Memo memo, CancellationToken ct = default)
+    {
+        var memoClient = _memosClient.WithAuthentication(accessToken);
+        return memoClient.UpdateMemoAsync(memo, ct);
+    }
+
+    public Task<List<Memo>> ListMemosAsync(string accessToken, int pageSize = 10, string? filter = null, CancellationToken ct = default)
+    {
+        var memoClient = _memosClient.WithAuthentication(accessToken);
+        return memoClient.ListMemosAsync(pageSize, filter, ct);
+    }
+
+    public async Task<Memo> HandleMemoCreation(string accessToken, string? mediaGroupId, string content, CancellationToken ct)
+    {
+        var memoClient = _memosClient.WithAuthentication(accessToken!);
+
+        if (!string.IsNullOrEmpty(mediaGroupId))
+        {
+            lock (_mediaGroupMutex)
+            {
+                if (_mediaGroupCache.TryGetValue(mediaGroupId, out var cached))
+                {
+                    return cached;
+                }
+            }
+
+            var memo = await memoClient.CreateMemoAsync(content, tags: _config.TagsToAdd, ct: ct);
+            _mediaGroupCache[mediaGroupId] = memo;
+            return memo;
+        }
+
+        return await memoClient.CreateMemoAsync(content, tags: _config.TagsToAdd, ct: ct);
+    }
+
+    public async Task ProcessFileMessage(string accessToken, FileInfo file, long chatId, string fileId, Memo memo, CancellationToken ct)
+    {
+        var memosClient = _memosClient.WithAuthentication(accessToken!);
+        //try
+        {
+            //var file = await _tgService.GetFile(bot, fileId, ct);
+
+            //if (string.IsNullOrEmpty(file.ContentType) || MediaTypeNames.Application.Octet.Equals(file.ContentType, StringComparison.OrdinalIgnoreCase))
+            //{
+            //    var bestMatch = _contentInspector.Inspect(file.Content).ByMimeType().FirstOrDefault();
+            //    if (null != bestMatch && !string.IsNullOrEmpty(bestMatch.MimeType))
+            //        file.ContentType = bestMatch.MimeType;
+            //}
+
+            await memosClient.CreateAttachmentAsync(
+                filename: Path.GetFileName(file.FilePath),
+                contentType: file.ContentType,
+                content: file.Content,
+                memoName: memo.Name,
+                ct: ct
+            );
+        }
+        //catch (Exception ex)
+        //{
+        //    await _tgService.SendError(chatId, new InvalidOperationException($"Failed to save attachment: {ex.Message}"), ct);
+        //}
+    }
+
+    public Task<InstanceProfile> GetInstanceProfileAsync(CancellationToken ct)
+    {
+        return _memosClient.GetInstanceProfileAsync(ct);
+    }
+    public string PrepareMessageContent(Message message)
+    {
+        var content = message.Text ?? string.Empty;
         var entities = message.Entities ?? Array.Empty<MessageEntity>();
         if (!string.IsNullOrEmpty(message.Caption))
         {
@@ -34,19 +167,19 @@ public static partial class MemosUtils
         }
         if (entities.Length > 0)
         {
-            content = MemosUtils.FormatContent(content, entities);
+            content = FormatContent(content, entities);
         }
 
         if (message.ForwardOrigin is not null)
-            content = MemosUtils.PrependForwardedFrom(message.ForwardOrigin, content);
+            content = PrependForwardedFrom(message.ForwardOrigin, content);
 
         if (message.ReplyToMessage != null)
-            content = MemosUtils.PrependReplyToMessage(message.ReplyToMessage, content);
+            content = PrependReplyToMessage(message.ReplyToMessage, content);
 
         return content;
     }
 
-    public static string ExtractMemoUidFromName(string name)
+    public string ExtractMemoUidFromName(string name)
     {
         var parts = name.Split('/');
         if (parts.Length != 2 || parts[0] != "memos" || string.IsNullOrEmpty(parts[1]))
@@ -56,7 +189,7 @@ public static partial class MemosUtils
         return parts[1];
     }
 
-    public static string BuildMemoSearchFilter(string searchString, Clients.Memos.Models.User? user)
+    public string BuildMemoSearchFilter(string searchString, Clients.Memos.Models.User? user)
     {
         var filter = $"content.contains(\"{searchString}\")";
         if (user is null)
@@ -73,7 +206,7 @@ public static partial class MemosUtils
         return $"{filter} && creator == \"{creator}\"";
     }
 
-    internal static string FormatContent(string content, MessageEntity[] entities)
+    internal string FormatContent(string content, MessageEntity[] entities)
     {
         var sorted = entities.OrderBy(e => e.Offset).ThenBy(e => e.Length).ToList();
 
@@ -105,12 +238,12 @@ public static partial class MemosUtils
         return sb.ToString();
     }
 
-    private static string PrependForwardedFrom(MessageOrigin origin, string content)
+    private  string PrependForwardedFrom(MessageOrigin origin, string content)
     {
         return $"\n> {FormatUserstring(origin)}: {FormatContentAsQuote(content)}";
     }
 
-    private static string PrependReplyToMessage(Message msg, string content)
+    private string PrependReplyToMessage(Message msg, string content)
     {
         return $"\n> {FormatUserstring(msg)}: {PrepareMessageContent(msg)} \n\n {content}";
     }

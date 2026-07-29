@@ -1,4 +1,5 @@
 ﻿using Memogram;
+using Memogram.Clients.Memos;
 using Memogram.Configs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,6 +27,7 @@ try
         {
             services.Configure<MemogramConfig>(context.Configuration.GetSection("Memogram"));
             services.Configure<TelegramConfig>(context.Configuration.GetSection("Telegram"));
+            services.Configure<TelegramConfig>(context.Configuration.GetSection("LocalStorage"));
             services.AddSingleton(sp =>
             {
                 var memogram = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<MemogramConfig>>().Value;
@@ -38,7 +40,15 @@ try
                 telegram.Validate();
                 return telegram;
             });
+            services.AddSingleton(sp =>
+            {
+                var localStorage = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LocalStorageConfig>>().Value;
+                localStorage.Validate();
+                return localStorage;
+            });
 
+            services.AddSingleton<MemosClient>();
+            services.AddSingleton<MemogramService>();
             services.AddSingleton<TelegramService>();
             services.AddSingleton<Service>();
         })

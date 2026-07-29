@@ -1,4 +1,5 @@
 ﻿using Memogram.Clients.Memos.Models;
+using Memogram.Configs;
 using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Retry;
@@ -14,13 +15,22 @@ public class MemosClient
     private readonly string _baseUrl;
     private readonly HttpClient _httpClient;
     private readonly ResiliencePipeline<HttpResponseMessage> _retryPipeline;
-    private readonly ILogger<MemosClient>? _logger;
+    private readonly ILogger<MemosClient> _logger;
 
     private const int MaxRetryAttempts = 3;
 
-    public MemosClient(string baseUrl, HttpClient? httpClient = null, ILogger<MemosClient>? logger = null)
+    public MemosClient(string baseUrl,
+        HttpClient? httpClient,
+        ILogger<MemosClient> logger)
     {
+        
+        baseUrl = baseUrl.Replace("dns:", "", StringComparison.Ordinal);
+        if (!baseUrl.StartsWith("http://", StringComparison.Ordinal) && !baseUrl.StartsWith("https://", StringComparison.Ordinal))
+        {
+            baseUrl = "http://" + baseUrl;
+        }
         _baseUrl = baseUrl.TrimEnd('/');
+
         _httpClient = httpClient ?? new HttpClient();
         _logger = logger;
 
@@ -53,6 +63,51 @@ public class MemosClient
                 }
             })
             .Build();
+    }
+
+    public MemosClient(MemogramConfig config, ILogger<MemosClient> logger) 
+        :this(config.ServerAddr, new HttpClient(), logger)
+    {
+        //var baseUrl = config.ServerAddr;
+        //baseUrl = baseUrl.Replace("dns:", "", StringComparison.Ordinal);
+        //if (!baseUrl.StartsWith("http://", StringComparison.Ordinal) && !baseUrl.StartsWith("https://", StringComparison.Ordinal))
+        //{
+        //    baseUrl = "http://" + baseUrl;
+        //}
+        //_baseUrl = baseUrl.TrimEnd('/');
+
+        //_httpClient = new HttpClient();
+        //_logger = logger;
+
+        //_retryPipeline = new ResiliencePipelineBuilder<HttpResponseMessage>()
+        //    .AddRetry(new RetryStrategyOptions<HttpResponseMessage>
+        //    {
+        //        MaxRetryAttempts = MaxRetryAttempts,
+        //        Delay = TimeSpan.FromSeconds(1),
+        //        BackoffType = DelayBackoffType.Exponential,
+        //        UseJitter = true,
+        //        ShouldHandle = new PredicateBuilder<HttpResponseMessage>()
+        //            .Handle<HttpRequestException>()
+        //            .Handle<TaskCanceledException>()
+        //            .HandleResult(r => r.StatusCode is
+        //                HttpStatusCode.RequestTimeout or
+        //                HttpStatusCode.TooManyRequests or
+        //                >= HttpStatusCode.InternalServerError),
+        //        OnRetry = args =>
+        //        {
+        //            var reason = args.Outcome.Exception is { } ex
+        //                ? ex.Message
+        //                : args.Outcome.Result is { } res
+        //                    ? $"HTTP {(int)res.StatusCode}"
+        //                    : "Unknown";
+
+        //            _logger?.LogWarning("Request failed ({Reason}). Retry {Attempt}/{MaxRetries} in {Delay:F1}s...",
+        //                reason, args.AttemptNumber + 1, MaxRetryAttempts, args.RetryDelay.TotalSeconds);
+
+        //            return ValueTask.CompletedTask;
+        //        }
+        //    })
+        //    .Build();
     }
 
     public MemosClient WithAuthentication(string accessToken)

@@ -1,10 +1,8 @@
-﻿using Memogram.Clients.Memos;
-using Memogram.Clients.Memos.Models;
+﻿using Memogram.Clients.Memos.Models;
 using Memogram.Configs;
 using Memogram.Store;
 using Microsoft.Extensions.Logging;
 using MimeDetective;
-using System.Collections.Concurrent;
 using System.Net.Mime;
 using System.Text.Json;
 using Telegram.Bot;
@@ -18,39 +16,43 @@ public partial class Service
     //private readonly TelegramBotClient _bot;
     //private BotCommandHandler[] _botCommands;
 
-    private readonly MemosClient _memosClient;
-    private readonly MemogramConfig _memogramConfig;
+    //private readonly MemosClient _memosClient;
+    //private readonly MemogramConfig _memogramConfig;
     //private readonly TelegramConfig _telegramConfig;
     private readonly UserStore _store;
     //private readonly HttpClient _tgHttpClient;
     private readonly ILogger<Service> _logger;
     private readonly TelegramService _tgService;
-    private readonly ConcurrentDictionary<string, Memo> _mediaGroupCache = new();
-    private readonly object _mediaGroupMutex = new();
+    private readonly MemogramService _memoService;
 
-    private InstanceProfile? _instanceProfile;
+    //private readonly ConcurrentDictionary<string, Memo> _mediaGroupCache = new();
+    //private readonly object _mediaGroupMutex = new();
+
+    //private InstanceProfile? _instanceProfile;
     //private readonly HashSet<string> _allowedUsernames;
 
     private readonly IContentInspector _contentInspector;
 
-    public Service(MemogramConfig memogramConfig, /*TelegramConfig telegramConfig,*/ ILogger<Service> logger, ILoggerFactory loggerFactory,
-        TelegramService tgService)
+    public Service(LocalStorageConfig localStorageConfig, /*TelegramConfig telegramConfig,*/ ILogger<Service> logger, ILoggerFactory loggerFactory,
+        TelegramService tgService, MemogramService memoService)
     {
-        _memogramConfig = memogramConfig;
+        //_memogramConfig = memogramConfig;
         //_telegramConfig = telegramConfig;
         _logger = logger;
 
         _tgService = tgService;
+        _memoService = memoService;
 
-        var baseUrl = _memogramConfig.ServerAddr;
-        baseUrl = baseUrl.Replace("dns:", "", StringComparison.Ordinal);
-        if (!baseUrl.StartsWith("http://", StringComparison.Ordinal) && !baseUrl.StartsWith("https://", StringComparison.Ordinal))
-        {
-            baseUrl = "http://" + baseUrl;
-        }
 
-        _memosClient = new MemosClient(baseUrl, logger: loggerFactory.CreateLogger<MemosClient>());
-        _store = new UserStore(_memogramConfig.Data);
+        //var baseUrl = _memogramConfig.ServerAddr;
+        //baseUrl = baseUrl.Replace("dns:", "", StringComparison.Ordinal);
+        //if (!baseUrl.StartsWith("http://", StringComparison.Ordinal) && !baseUrl.StartsWith("https://", StringComparison.Ordinal))
+        //{
+        //    baseUrl = "http://" + baseUrl;
+        //}
+        //_memosClient = new MemosClient(baseUrl, logger: loggerFactory.CreateLogger<MemosClient>());
+
+        _store = new UserStore(localStorageConfig.Filename);
         _store.Init();
 
         //_allowedUsernames = ParseAllowedUsernames(_telegramConfig.AllowedUsernames);
@@ -82,15 +84,15 @@ public partial class Service
     {
         _logger.LogInformation("Memogram starting...");
 
-        try
-        {
-            _instanceProfile = await _memosClient.GetInstanceProfileAsync(ct);
-            _logger.LogInformation("Instance profile: {Profile}", JsonSerializer.Serialize(_instanceProfile));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to get instance profile");
-        }
+        //try
+        //{
+            //_instanceProfile = await _memoService.GetInstanceProfileAsync(ct);
+            _logger.LogInformation("Instance profile: {Profile}", JsonSerializer.Serialize(_memoService.InstanceProfile));
+        //}
+        //catch (Exception ex)
+        //{
+        //    _logger.LogWarning(ex, "Failed to get instance profile");
+        //}
 
         //_botCommands = [
         //    new BotCommandHandler{Command = new BotCommand("/start", "Usage: /start <memos_user_access_token>"), Handler = StartHandler },
@@ -136,7 +138,7 @@ public partial class Service
             return;
         }
 
-        string content = MemosUtils.PrepareMessageContent(message);
+        string content = _memoService.PrepareMessageContent(message);
 
         bool hasAttachment = message.Document is not null
             || message.Photo?.Length > 0
@@ -149,11 +151,11 @@ public partial class Service
             return;
         }
 
-        var authClient = _memosClient.WithAuthentication(accessToken!);
+        //var authClient = _memosClient.WithAuthentication(accessToken!);
         Memo memo;
         try
         {
-            memo = await HandleMemoCreation(authClient, message.MediaGroupId, content, ct);
+            memo = await _memoService.HandleMemoCreation(accessToken!, message.MediaGroupId, content, ct);
         }
         catch (Exception)
         {
@@ -162,25 +164,22 @@ public partial class Service
         }
 
         if (message.Document is not null)
-            await ProcessFileMessage(authClient, bot, chatId, message.Document.FileId, memo, ct);
+            await ProcessFileMessage(accessToken!, bot, chatId, message.Document.FileId, memo, ct);
         if (message.Voice is not null)
-            await ProcessFileMessage(authClient, bot, chatId, message.Voice.FileId, memo, ct);
+            await ProcessFileMessage(accessToken!, bot, chatId, message.Voice.FileId, memo, ct);
         if (message.Video is not null)
-            await ProcessFileMessage(authClient, bot, chatId, message.Video.FileId, memo, ct);
+            await ProcessFileMessage(accessToken!, bot, chatId, message.Video.FileId, memo, ct);
         if (message.Photo?.Length > 0)
         {
             var photo = message.Photo[^1];
-            await ProcessFileMessage(authClient, bot, chatId, photo.FileId, memo, ct);
+            await ProcessFileMessage(accessToken!, bot, chatId, photo.FileId, memo, ct);
         }
 
-        var memoUid = MemosUtils.ExtractMemoUidFromName(memo.Name);
-        var baseUrl = _memogramConfig.ServerAddr;
-        if (_instanceProfile?.InstanceUrl is { Length: > 0 })
-        {
-            baseUrl = _instanceProfile.InstanceUrl;
-        }
-
-        string msg = $"Content saved as {memo.Visibility} with [{memo.Name}]({baseUrl}/memos/{memoUid})";
+        var memoUid = _memoService.ExtractMemoUidFromName(memo.Name);
+        //var baseUrl = _memogramConfig.ServerAddr;  //TODO:!!!!
+        //if (_instanceProfile?.InstanceUrl is { Length: > 0 })
+        //    baseUrl = _instanceProfile.InstanceUrl;
+        string msg = $"Content saved as {memo.Visibility} with [{memo.Name}]({_memoService.BaseUrl}/memos/{memoUid})";
         await _tgService.SendMessageSaved(bot, message, chatId, memo, msg, ct);
     }
 
@@ -198,10 +197,10 @@ public partial class Service
             return;
         }
 
-        var authClient = _memosClient.WithAuthentication(accessToken);
+        //var authClient = _memosClient.WithAuthentication(accessToken);
         try
         {
-            var user = await authClient.GetCurrentUserAsync(ct);
+            var user = await _memoService.GetCurrentUserAsync(accessToken, ct);
             _store.SetUserAccessToken(userId, accessToken);
             await bot.SendMessage(chatId, $"Hello {user.DisplayName}!", cancellationToken: ct);
         }
@@ -229,11 +228,11 @@ public partial class Service
             return;
         }
 
-        var authClient = _memosClient.WithAuthentication(accessToken!);
+        //var authClient = _memosClient.WithAuthentication(accessToken!);
         Clients.Memos.Models.User? user;
         try
         {
-            user = await authClient.GetCurrentUserAsync(ct);
+            user = await _memoService.GetCurrentUserAsync(accessToken!, ct);
         }
         catch
         {
@@ -241,8 +240,8 @@ public partial class Service
             return;
         }
 
-        var filter = MemosUtils.BuildMemoSearchFilter(searchString, user);
-        var memos = await authClient.ListMemosAsync(pageSize: 10, filter: filter, ct);
+        var filter = _memoService.BuildMemoSearchFilter(searchString, user);
+        var memos = await _memoService.ListMemosAsync(accessToken!, pageSize: 10, filter: filter, ct);
 
         if (memos.Count == 0)
         {
@@ -255,7 +254,7 @@ public partial class Service
                 string trimmedContent = memo.Content.Length > 200
                     ? $"{memo.Content[..200]}..."
                     : memo.Content;
-                string tgMessage = $"[🔗]({_memogramConfig.ServerAddr}/{memo.Name}) {trimmedContent.TrimEnd()}";
+                string tgMessage = $"[🔗]({_memoService.BaseUrl}/{memo.Name}) {trimmedContent.TrimEnd()}";
 
                 await bot.SendMessage(chatId, tgMessage, 
                     parseMode: ParseMode.Markdown, 
@@ -279,7 +278,7 @@ public partial class Service
             return;
         }
 
-        var authClient = _memosClient.WithAuthentication(accessToken!);
+        //var authClient = _memosClient.WithAuthentication(accessToken!);
 
         var parts = data.Split(' ');
         if (parts.Length != 2)
@@ -294,7 +293,7 @@ public partial class Service
         Memo memo;
         try
         {
-            memo = await authClient.GetMemoAsync(memoName, ct);
+            memo = await _memoService.GetMemoAsync(accessToken!, memoName, ct);
         }
         catch
         {
@@ -323,7 +322,7 @@ public partial class Service
 
         try
         {
-            memo = await authClient.UpdateMemoAsync(memo, ct);
+            memo = await _memoService.UpdateMemoAsync(accessToken!, memo, ct);
         }
         catch
         {
@@ -332,18 +331,12 @@ public partial class Service
         }
 
         var pinnedMarker = memo.Pinned ? "📌" : "";
-        var memoUid = MemosUtils.ExtractMemoUidFromName(memo.Name);
-        var baseUrl = _memogramConfig.ServerAddr;
-        if (_instanceProfile?.InstanceUrl is { Length: > 0 })
-        {
-            baseUrl = _instanceProfile.InstanceUrl;
-        }
-
+        var memoUid = _memoService.ExtractMemoUidFromName(memo.Name);
         var inlineKeyboard = _tgService.BuildKeyboard(memo);
         await bot.EditMessageText(
             chatId,
             messageId,
-            $"Memo updated as {memo.Visibility} with [{memo.Name}]({baseUrl}/memos/{memoUid}) {pinnedMarker}",
+            $"Memo updated as {memo.Visibility} with [{memo.Name}]({_memoService.BaseUrl}/memos/{memoUid}) {pinnedMarker}",
             parseMode: ParseMode.Markdown,
             replyMarkup: inlineKeyboard,
             cancellationToken: ct
@@ -352,27 +345,27 @@ public partial class Service
         await bot.AnswerCallbackQuery(callbackQuery.Id, "Memo updated", cancellationToken: ct);
     }
 
-    private async Task<Memo> HandleMemoCreation(MemosClient memoClient, string? mediaGroupId, string content, CancellationToken ct)
-    {
-        if (!string.IsNullOrEmpty(mediaGroupId))
-        {
-            lock (_mediaGroupMutex)
-            {
-                if (_mediaGroupCache.TryGetValue(mediaGroupId, out var cached))
-                {
-                    return cached;
-                }
-            }
+    //private async Task<Memo> HandleMemoCreation(MemosClient memoClient, string? mediaGroupId, string content, CancellationToken ct)
+    //{
+    //    if (!string.IsNullOrEmpty(mediaGroupId))
+    //    {
+    //        lock (_mediaGroupMutex)
+    //        {
+    //            if (_mediaGroupCache.TryGetValue(mediaGroupId, out var cached))
+    //            {
+    //                return cached;
+    //            }
+    //        }
 
-            var memo = await memoClient.CreateMemoAsync(content, tags: _memogramConfig.TagsToAdd, ct: ct);
-            _mediaGroupCache[mediaGroupId] = memo;
-            return memo;
-        }
+    //        var memo = await memoClient.CreateMemoAsync(content, tags: _memogramConfig.TagsToAdd, ct: ct);
+    //        _mediaGroupCache[mediaGroupId] = memo;
+    //        return memo;
+    //    }
 
-        return await memoClient.CreateMemoAsync(content, tags: _memogramConfig.TagsToAdd, ct: ct);
-    }
+    //    return await memoClient.CreateMemoAsync(content, tags: _memogramConfig.TagsToAdd, ct: ct);
+    //}
 
-    private async Task ProcessFileMessage(MemosClient memosClient, ITelegramBotClient bot, long chatId, string fileId, Memo memo, CancellationToken ct)
+    private async Task ProcessFileMessage(string accessToken, ITelegramBotClient bot, long chatId, string fileId, Memo memo, CancellationToken ct)
     {
         try
         {
@@ -385,13 +378,17 @@ public partial class Service
                     file.ContentType = bestMatch.MimeType;
             }
 
-            await memosClient.CreateAttachmentAsync(
-                filename: Path.GetFileName(file.FilePath),
-                contentType: file.ContentType,
-                content: file.Content,
-                memoName: memo.Name,
-                ct: ct
-            );
+            await _memoService.ProcessFileMessage(accessToken, 
+                new MemogramService.FileInfo { FilePath = file.FilePath, Content = file.Content, ContentType = file.ContentType},
+                chatId, fileId, memo, ct);
+
+            //await memosClient.CreateAttachmentAsync(
+            //    filename: Path.GetFileName(file.FilePath),
+            //    contentType: file.ContentType,
+            //    content: file.Content,
+            //    memoName: memo.Name,
+            //    ct: ct
+            //);
         }
         catch (Exception ex)
         {

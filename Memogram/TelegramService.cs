@@ -1,7 +1,6 @@
 ﻿using Memogram.Clients.Memos.Models;
 using Memogram.Configs;
 using Microsoft.Extensions.Logging;
-using System.Buffers.Text;
 using System.Net;
 using System.Net.Mime;
 using Telegram.Bot;

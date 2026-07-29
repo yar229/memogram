@@ -11,13 +11,6 @@ public class MemogramConfig
     {
         if (string.IsNullOrWhiteSpace(ServerAddr))
             throw new InvalidOperationException("Memogram:ServerAddr is required");
-
-        if (string.IsNullOrWhiteSpace(Data))
-            Data = "data.txt";
-
-        if (!File.Exists(Data))
-            File.WriteAllText(Data, string.Empty);
-
-        Data = Path.GetFullPath(Data);
     }
 }
+
