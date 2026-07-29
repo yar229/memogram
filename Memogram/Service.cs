@@ -2,6 +2,7 @@
 using Memogram.Clients.Memos.Models;
 using Memogram.Configs;
 using Memogram.Store;
+using Microsoft.Extensions.Logging;
 using MimeDetective;
 using System.Collections.Concurrent;
 using System.Net;
@@ -27,6 +28,7 @@ public partial class Service
     private readonly TelegramConfig _telegramConfig;
     private readonly UserStore _store;
     private readonly HttpClient _tgHttpClient;
+    private readonly ILogger<Service> _logger;
 
     private readonly ConcurrentDictionary<string, Memo> _mediaGroupCache = new();
     private readonly object _mediaGroupMutex = new();
@@ -36,10 +38,11 @@ public partial class Service
 
     private readonly IContentInspector _contentInspector;
 
-    public Service(MemogramConfig memogramConfig, TelegramConfig telegramConfig)
+    public Service(MemogramConfig memogramConfig, TelegramConfig telegramConfig, ILogger<Service> logger)
     {
         _memogramConfig = memogramConfig;
         _telegramConfig = telegramConfig;
+        _logger = logger;
 
         var baseUrl = _memogramConfig.ServerAddr;
         baseUrl = baseUrl.Replace("dns:", "", StringComparison.Ordinal);
@@ -79,16 +82,16 @@ public partial class Service
 
     public async Task Start(CancellationToken ct = default)
     {
-        Console.WriteLine("Memogram started");
+        _logger.LogInformation("Memogram started");
 
         try
         {
             _instanceProfile = await _memosClient.GetInstanceProfileAsync(ct);
-            Console.WriteLine($"Instance profile: {JsonSerializer.Serialize(_instanceProfile)}");
+            _logger.LogInformation("Instance profile: {Profile}", JsonSerializer.Serialize(_instanceProfile));
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Warning: failed to get instance profile: {ex.Message}");
+            _logger.LogWarning(ex, "Failed to get instance profile");
         }
 
         _botCommands = [
@@ -102,7 +105,7 @@ public partial class Service
             new ReceiverOptions { AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery] },
             cancellationToken: ct );
 
-        Console.WriteLine("Bot is listening...");
+        _logger.LogInformation("Bot is listening");
         await Task.Delay(Timeout.Infinite, ct);
     }
 
@@ -126,7 +129,7 @@ public partial class Service
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error handling update: {ex}");
+            _logger.LogError(ex, "Error handling update");
         }
     }
 
@@ -476,14 +479,14 @@ public partial class Service
 
     private async Task SendError(ITelegramBotClient bot, long chatId, Exception ex, CancellationToken ct)
     {
-        Console.WriteLine($"Error: {ex.Message}");
+        _logger.LogError(ex, "{Message}", ex.Message);
         try
         {
             await bot.SendMessage(chatId, $"Error: {ex.Message}", cancellationToken: ct);
         }
         catch
         {
-            // Ignore send errors
+            _logger.LogError(ex, "Failed to send error to telegram: {Message}", ex.Message);
         }
     }
 
@@ -510,18 +513,18 @@ public partial class Service
         return _allowedUsernames.Contains(username.Trim().ToLowerInvariant());
     }
 
-    private static Task HandleErrorAsync(ITelegramBotClient bot, Exception exception, CancellationToken ct)
+    private Task HandleErrorAsync(ITelegramBotClient bot, Exception exception, CancellationToken ct)
     {
-        var errorMessage = exception switch
+        switch (exception)
         {
-            ApiRequestException apiRequestException =>
-                $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}",
-            _ => exception.ToString()
-        };
-        Console.WriteLine(errorMessage);
+            case ApiRequestException api:
+                _logger.LogError(api, "Telegram API Error: [{Code}] {Message}", api.ErrorCode, api.Message);
+                break;
+            default:
+                _logger.LogError(exception, "Unknown error in bot update");
+                break;
+        }
         return Task.CompletedTask;
     }
 
-    [GeneratedRegex(@"^(\s*)(.*?)(\s*)$")]
-    private static partial Regex EntityRegex();
 }
