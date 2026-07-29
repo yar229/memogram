@@ -1,7 +1,7 @@
 ﻿using Telegram.Bot;
 using Telegram.Bot.Types;
 
-namespace Memogram;
+namespace Memogram.Services.Telegram;
 
 class BotCommandHandler
 {

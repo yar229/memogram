@@ -15,6 +15,7 @@
   <ItemGroup>
     <None Update="appsettings.production.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  <DependentUpon>appsettings.json</DependentUpon>
     </None>
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

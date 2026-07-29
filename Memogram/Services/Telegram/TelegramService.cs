@@ -10,7 +10,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace Memogram;
+namespace Memogram.Services.Telegram;
 
 public class TelegramService
 {
@@ -200,8 +200,6 @@ public class TelegramService
             await bot.SetMessageReaction(chatId, message.Id, [likeReaction]);
         }
     }
-
-    //===============================================================================================================================================================
 
 
     public InlineKeyboardMarkup BuildKeyboard(Memo memo)

@@ -2,12 +2,9 @@
 using Memogram.Clients.Memos.Models;
 using Memogram.Configs;
 using Microsoft.Extensions.Logging;
-using MimeDetective;
 using System.Collections.Concurrent;
-using System.Net.Mime;
 using System.Text;
 using System.Text.RegularExpressions;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
@@ -15,13 +12,6 @@ namespace Memogram;
 
 public partial class MemogramService
 {
-    public class FileInfo
-    {
-        public string FilePath { get; set; }
-        public byte[] Content { get; set; }
-        public string ContentType { get; set; }
-    }
-
     private static readonly Dictionary<MessageEntityType, Func<string, string, string, MessageEntity, string>> EntityConverters = new()
     {
         [MessageEntityType.Url] = (string p, string c, string s, MessageEntity entity) => $"{p}[{c}]({c}){s}",
@@ -44,23 +34,13 @@ public partial class MemogramService
     private readonly object _mediaGroupMutex = new();
     private readonly ConcurrentDictionary<string, Memo> _mediaGroupCache = new();
 
-
     public InstanceProfile? InstanceProfile { get; set; }
-    
 
     public MemogramService(MemosClient memosClient,  MemogramConfig config, ILogger<MemogramService> logger)
     {
         _memosClient = memosClient;
         _config = config;
         _logger = logger;
-
-        //var baseUrl = _config.ServerAddr;
-        //baseUrl = baseUrl.Replace("dns:", "", StringComparison.Ordinal);
-        //if (!baseUrl.StartsWith("http://", StringComparison.Ordinal) && !baseUrl.StartsWith("https://", StringComparison.Ordinal))
-        //{
-        //    baseUrl = "http://" + baseUrl;
-        //}
-        //_memosClient = new MemosClient(baseUrl, logger: loggerFactory.CreateLogger<MemosClient>());
 
         InstanceProfile = GetInstanceProfileAsync(CancellationToken.None).Result; //TODO:!!!!
     }
@@ -127,29 +107,13 @@ public partial class MemogramService
     public async Task ProcessFileMessage(string accessToken, FileInfo file, long chatId, string fileId, Memo memo, CancellationToken ct)
     {
         var memosClient = _memosClient.WithAuthentication(accessToken!);
-        //try
-        {
-            //var file = await _tgService.GetFile(bot, fileId, ct);
 
-            //if (string.IsNullOrEmpty(file.ContentType) || MediaTypeNames.Application.Octet.Equals(file.ContentType, StringComparison.OrdinalIgnoreCase))
-            //{
-            //    var bestMatch = _contentInspector.Inspect(file.Content).ByMimeType().FirstOrDefault();
-            //    if (null != bestMatch && !string.IsNullOrEmpty(bestMatch.MimeType))
-            //        file.ContentType = bestMatch.MimeType;
-            //}
-
-            await memosClient.CreateAttachmentAsync(
-                filename: Path.GetFileName(file.FilePath),
-                contentType: file.ContentType,
-                content: file.Content,
-                memoName: memo.Name,
-                ct: ct
-            );
-        }
-        //catch (Exception ex)
-        //{
-        //    await _tgService.SendError(chatId, new InvalidOperationException($"Failed to save attachment: {ex.Message}"), ct);
-        //}
+        await memosClient.CreateAttachmentAsync(
+            filename: Path.GetFileName(file.FilePath),
+            contentType: file.ContentType,
+            content: file.Content,
+            memoName: memo.Name,
+            ct: ct);
     }
 
     public Task<InstanceProfile> GetInstanceProfileAsync(CancellationToken ct)
@@ -166,9 +130,7 @@ public partial class MemogramService
             entities = message.CaptionEntities ?? Array.Empty<MessageEntity>();
         }
         if (entities.Length > 0)
-        {
             content = FormatContent(content, entities);
-        }
 
         if (message.ForwardOrigin is not null)
             content = PrependForwardedFrom(message.ForwardOrigin, content);
@@ -183,9 +145,8 @@ public partial class MemogramService
     {
         var parts = name.Split('/');
         if (parts.Length != 2 || parts[0] != "memos" || string.IsNullOrEmpty(parts[1]))
-        {
             throw new ArgumentException($"Invalid memo name: {name}");
-        }
+
         return parts[1];
     }
 
@@ -197,9 +158,7 @@ public partial class MemogramService
 
         var creator = user.Name;
         if (string.IsNullOrEmpty(creator) && !string.IsNullOrEmpty(user.Username))
-        {
             creator = "users/" + user.Username;
-        }
         if (string.IsNullOrEmpty(creator))
             return filter;
 
@@ -238,15 +197,11 @@ public partial class MemogramService
         return sb.ToString();
     }
 
-    private  string PrependForwardedFrom(MessageOrigin origin, string content)
-    {
-        return $"\n> {FormatUserstring(origin)}: {FormatContentAsQuote(content)}";
-    }
+    private string PrependForwardedFrom(MessageOrigin origin, string content) 
+        => $"\n> {FormatUserstring(origin)}: {FormatContentAsQuote(content)}";
 
-    private string PrependReplyToMessage(Message msg, string content)
-    {
-        return $"\n> {FormatUserstring(msg)}: {PrepareMessageContent(msg)} \n\n {content}";
-    }
+    private string PrependReplyToMessage(Message msg, string content) 
+        => $"\n> {FormatUserstring(msg)}: {PrepareMessageContent(msg)} \n\n {content}";
 
     private static string FormatUserstring(Message msg)
     {
@@ -257,11 +212,8 @@ public partial class MemogramService
         return FormatUserstring(originName, msg.From?.Username, msg.From?.IsBot);
     }
 
-    private static string FormatContentAsQuote(string content)
-    {
-        return content.Replace("\n", "\n> ");
-
-    }
+    private static string FormatContentAsQuote(string content) 
+        => content.Replace("\n", "\n> ");
 
     private static string FormatUserstring(MessageOrigin msg)
     {
@@ -295,7 +247,7 @@ public partial class MemogramService
     }
     private static string FormatUserstring(string name, string username, bool? isBot = false)
     {
-        string ava = isBot ?? false ? "🤖" : "👤";
+        string ava = isBot ?? false ? "🤖" : "👤"; //TODO: to config
         if (!string.IsNullOrEmpty(username))
             return $"{ava}[{name}](https://t.me/{username})";
         return $"{ava}{name}";
@@ -324,4 +276,11 @@ public partial class MemogramService
 
     [GeneratedRegex(@"(?s)^(\s*)(.*?)(\s*)$")]
     private static partial Regex EntityRegex();
+
+    public class FileInfo
+    {
+        public string FilePath { get; set; }
+        public byte[] Content { get; set; }
+        public string ContentType { get; set; }
+    }
 }

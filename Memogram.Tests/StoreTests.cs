@@ -1,4 +1,4 @@
-using Memogram.Store;
+﻿using Memogram.Services.UserStore;
 using Xunit;
 
 namespace Memogram.Tests;
@@ -8,7 +8,7 @@ public class StoreTests
     [Fact]
     public void ParseLine_ValidLine_ReturnsUserAndToken()
     {
-        var (userId, token) = UserStore.ParseLine("123:abc:def");
+        var (userId, token) = UserStoreService.ParseLine("123:abc:def");
         Assert.Equal(123, userId);
         Assert.Equal("abc:def", token);
     }
@@ -16,7 +16,7 @@ public class StoreTests
     [Fact]
     public void ParseLine_NoColon_ReturnsEmpty()
     {
-        var (userId, token) = UserStore.ParseLine("invalidline");
+        var (userId, token) = UserStoreService.ParseLine("invalidline");
         Assert.Equal(0, userId);
         Assert.Equal(string.Empty, token);
     }
@@ -24,7 +24,7 @@ public class StoreTests
     [Fact]
     public void ParseLine_NonNumericUserId_ReturnsEmpty()
     {
-        var (userId, token) = UserStore.ParseLine("abc:token");
+        var (userId, token) = UserStoreService.ParseLine("abc:token");
         Assert.Equal(0, userId);
         Assert.Equal(string.Empty, token);
     }
@@ -35,13 +35,13 @@ public class StoreTests
         var dataPath = Path.Combine(Path.GetTempPath(), $"memogram-test-{Guid.NewGuid():N}.txt");
         try
         {
-            var store = new UserStore(dataPath);
+            var store = new UserStoreService(dataPath);
             store.Init();
 
             store.SetUserAccessToken(42, "token-one");
             store.SetUserAccessToken(7, "token:two");
 
-            var reloaded = new UserStore(dataPath);
+            var reloaded = new UserStoreService(dataPath);
             reloaded.Init();
 
             Assert.True(reloaded.TryGetUserAccessToken(42, out var token1));

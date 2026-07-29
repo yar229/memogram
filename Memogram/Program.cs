@@ -1,7 +1,9 @@
 ﻿using Memogram;
 using Memogram.Clients.Memos;
 using Memogram.Configs;
-using Memogram.Store;
+using Memogram.Services;
+using Memogram.Services.Telegram;
+using Memogram.Services.UserStore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -48,11 +50,11 @@ try
                 return localStorage;
             });
 
-            services.AddSingleton<UserStore>();
+            services.AddSingleton<UserStoreService>();
             services.AddSingleton<MemosClient>();
             services.AddSingleton<MemogramService>();
             services.AddSingleton<TelegramService>();
-            services.AddSingleton<Service>();
+            services.AddSingleton<MainService>();
         })
         .Build();
 
@@ -63,7 +65,7 @@ try
         cts.Cancel();
     };
 
-    var service = host.Services.GetRequiredService<Service>();
+    var service = host.Services.GetRequiredService<MainService>();
     var logger = host.Services.GetRequiredService<ILogger<Program>>();
 
     try
