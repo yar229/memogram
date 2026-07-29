@@ -33,6 +33,7 @@ public partial class MemogramService
 
     private readonly object _mediaGroupMutex = new();
     private readonly ConcurrentDictionary<string, Memo> _mediaGroupCache = new();
+    private readonly ConcurrentDictionary<string, MemosClient> _authClientCache = new(StringComparer.Ordinal);
 
     public InstanceProfile? InstanceProfile { get; set; }
 
@@ -58,33 +59,34 @@ public partial class MemogramService
     }
 
 
+    private MemosClient GetAuthenticatedClient(string accessToken)
+    {
+        return _authClientCache.GetOrAdd(accessToken, token => _memosClient.WithAuthentication(token));
+    }
+
     public Task<Clients.Memos.Models.User> GetCurrentUserAsync(string accessToken, CancellationToken ct = default)
     {
-        var memoClient = _memosClient.WithAuthentication(accessToken);
-        return memoClient.GetCurrentUserAsync(ct);
+        return GetAuthenticatedClient(accessToken).GetCurrentUserAsync(ct);
     }
 
     public Task<Memo> GetMemoAsync(string accessToken, string name, CancellationToken ct = default)
     {
-        var memoClient = _memosClient.WithAuthentication(accessToken);
-        return memoClient.GetMemoAsync(name, ct);
+        return GetAuthenticatedClient(accessToken).GetMemoAsync(name, ct);
     }
 
     public Task<Memo> UpdateMemoAsync(string accessToken, Memo memo, CancellationToken ct = default)
     {
-        var memoClient = _memosClient.WithAuthentication(accessToken);
-        return memoClient.UpdateMemoAsync(memo, ct);
+        return GetAuthenticatedClient(accessToken).UpdateMemoAsync(memo, ct);
     }
 
     public Task<List<Memo>> ListMemosAsync(string accessToken, int pageSize = 10, string? filter = null, CancellationToken ct = default)
     {
-        var memoClient = _memosClient.WithAuthentication(accessToken);
-        return memoClient.ListMemosAsync(pageSize, filter, ct);
+        return GetAuthenticatedClient(accessToken).ListMemosAsync(pageSize, filter, ct);
     }
 
     public async Task<Memo> HandleMemoCreation(string accessToken, string? mediaGroupId, string content, CancellationToken ct)
     {
-        var memoClient = _memosClient.WithAuthentication(accessToken!);
+        var memoClient = GetAuthenticatedClient(accessToken!);
 
         if (!string.IsNullOrEmpty(mediaGroupId))
         {
@@ -106,7 +108,7 @@ public partial class MemogramService
 
     public async Task ProcessFileMessage(string accessToken, FileInfo file, long chatId, string fileId, Memo memo, CancellationToken ct)
     {
-        var memosClient = _memosClient.WithAuthentication(accessToken!);
+        var memosClient = GetAuthenticatedClient(accessToken!);
 
         await memosClient.CreateAttachmentAsync(
             filename: Path.GetFileName(file.FilePath),
@@ -116,10 +118,9 @@ public partial class MemogramService
             ct: ct);
     }
 
-    public Task<InstanceProfile> GetInstanceProfileAsync(CancellationToken ct)
-    {
-        return _memosClient.GetInstanceProfileAsync(ct);
-    }
+    public Task<InstanceProfile> GetInstanceProfileAsync(CancellationToken ct) 
+        => _memosClient.GetInstanceProfileAsync(ct);
+
     public string PrepareMessageContent(Message message)
     {
         var content = message.Text ?? string.Empty;
@@ -165,7 +166,7 @@ public partial class MemogramService
         return $"{filter} && creator == \"{creator}\"";
     }
 
-    internal string FormatContent(string content, MessageEntity[] entities)
+    public static string FormatContent(string content, MessageEntity[] entities)
     {
         var sorted = entities.OrderBy(e => e.Offset).ThenBy(e => e.Length).ToList();
 
@@ -197,7 +198,7 @@ public partial class MemogramService
         return sb.ToString();
     }
 
-    private string PrependForwardedFrom(MessageOrigin origin, string content) 
+    private static string PrependForwardedFrom(MessageOrigin origin, string content) 
         => $"\n> {FormatUserstring(origin)}: {FormatContentAsQuote(content)}";
 
     private string PrependReplyToMessage(Message msg, string content) 
