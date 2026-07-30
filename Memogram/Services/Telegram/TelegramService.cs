@@ -1,7 +1,5 @@
 ﻿using Memogram.Configs;
 using Microsoft.Extensions.Logging;
-using System.Net;
-using System.Net.Mime;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
@@ -15,27 +13,19 @@ public class TelegramService
 {
     private readonly TelegramConfig _config;
     private readonly ILogger<TelegramService> _logger;
-    private readonly HttpClient _tgHttpClient;
-    private readonly TelegramBotClient _bot;
+    private readonly ITelegramBotClient _bot;
     private readonly HashSet<string> _allowedUsernames;
     private BotCommandHandler[] _botCommands = null!;
     private Func<Message, CancellationToken, Task> _handleMessage = null!;
     private Func<CallbackQuery, CancellationToken, Task> _handleCallback = null!;
 
-    public TelegramService(TelegramConfig config, ILogger<TelegramService> logger)
+    public TelegramService(TelegramConfig config, ITelegramBotClient bot, ILogger<TelegramService> logger)
     {
         _config = config;
+        _bot = bot;
         _logger = logger;
 
         _allowedUsernames = ParseAllowedUsernames(config.AllowedUsernames);
-
-        var handler = CreateHttpClientHandler(_config.Proxy);
-        var telegramHttpClient = new HttpClient(handler);
-        _tgHttpClient = new HttpClient(handler);
-
-        _bot = !string.IsNullOrEmpty(_config.BotProxyAddr)
-            ? new TelegramBotClient(new TelegramBotClientOptions(_config.BotToken, _config.BotProxyAddr), telegramHttpClient)
-            : new TelegramBotClient(_config.BotToken, telegramHttpClient);
     }
 
     public async Task Start(
@@ -162,20 +152,22 @@ public class TelegramService
 
 
 
-
-    public async Task<(string FilePath, byte[] Content, string ContentType)> GetFile(string fileId, CancellationToken ct)
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="fileId"></param>
+    /// <param name="ms"></param>
+    /// <param name="ct"></param>
+    /// <returns>filepath</returns>
+    /// <exception cref="FileNotFoundException"></exception>
+    public async Task<string> GetFileAsync(string fileId, Stream ms, CancellationToken ct)
     {
         var file = await _bot.GetFile(fileId, cancellationToken: ct);
         if (null == file)
             throw new FileNotFoundException($"Telegram cannot find file with fileId = {fileId}" );
-        var fileLink = $"https://api.telegram.org/file/bot{_config.BotToken}/{file.FilePath!}";
 
-        var response = await _tgHttpClient.GetAsync(fileLink, ct);
-        response.EnsureSuccessStatusCode();
-
-        var bytes = await response.Content.ReadAsByteArrayAsync(ct);
-        var contentType = response.Content.Headers.ContentType?.MediaType ?? MediaTypeNames.Application.Octet;
-        return (file.FilePath!, bytes, contentType);
+        await _bot.DownloadFile(file, ms, ct);
+        return file.FilePath!;
     }
 
     public async Task SendError(long chatId, Exception ex, CancellationToken ct)
@@ -270,14 +262,5 @@ public class TelegramService
             }
         }
         return allowed;
-    }
-
-    private static HttpClientHandler CreateHttpClientHandler(string? proxyUrl)
-    {
-        if (string.IsNullOrWhiteSpace(proxyUrl))
-            return new HttpClientHandler();
-
-        var proxy = new WebProxy(proxyUrl);
-        return new HttpClientHandler { Proxy = proxy, UseProxy = true };
     }
 }

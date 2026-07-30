@@ -1,7 +1,9 @@
 ﻿namespace Memogram.Configs;
 
-public class LocalStorageConfig
+public class LocalStorageConfig : IValidableConfig
 {
+    public static string SectionName => "LocalStorage";
+
     public string Filename { get; set; } = "data.txt";
 
     public void Validate()

@@ -1,4 +1,5 @@
 ﻿using Memogram.Clients.Memos.Models;
+using Memogram.Services.Memos;
 using Memogram.Services.Telegram;
 using Memogram.Services.UserStore;
 using Microsoft.Extensions.Logging;
@@ -10,7 +11,7 @@ using Telegram.Bot.Types.Enums;
 
 namespace Memogram.Services;
 
-public partial class MainService
+public class MainService
 {
     private readonly UserStoreService _storeService;
     private readonly TelegramService _tgService;
@@ -28,7 +29,6 @@ public partial class MainService
         _memoService = memoService;
 
         _storeService = storeService;
-        _storeService.Init();
 
         _contentInspector = contentInspector;
     }
@@ -37,13 +37,20 @@ public partial class MainService
     {
         _logger.LogInformation("Memogram starting...");
 
+        await _storeService.InitializeAsync();
         await _memoService.InitializeAsync(ct);
+
         _logger.LogInformation("Instance profile: {Profile}", JsonSerializer.Serialize(_memoService.InstanceProfile));
 
-        _ = _tgService.Start(
-            StartHandler, SearchHandler, 
-            HandleMessageAsync, HandleCallbackQueryAsync, 
-            ct);
+        await _tgService
+            .Start(StartHandler, SearchHandler,
+                HandleMessageAsync, HandleCallbackQueryAsync,
+                ct);
+            //.ContinueWith(t => 
+            //{
+            //    if (t.IsFaulted) 
+            //        _logger.LogCritical(t.Exception, "Bot failed to start");
+            //}, TaskContinuationOptions.OnlyOnFaulted);
 
         await Task.Delay(Timeout.Infinite, ct);
     }
@@ -114,7 +121,7 @@ public partial class MainService
         try
         {
             var user = await _memoService.GetCurrentUserAsync(accessToken, ct);
-            _storeService.SetUserAccessToken(message.From!.Id, accessToken);
+            await _storeService.SetUserAccessTokenAsync(message.From!.Id, accessToken);
             await _tgService.SendMessage(chatId, $"Hello {user.DisplayName}!", ct);
         }
         catch
@@ -240,17 +247,17 @@ public partial class MainService
     {
         try
         {
-            var file = await _tgService.GetFile(fileId, ct);
+            using var ms = new MemoryStream();
+            var filepath = await _tgService.GetFileAsync(fileId, ms, ct);
+            var bytes = ms.ToArray();
 
-            if (string.IsNullOrEmpty(file.ContentType) || MediaTypeNames.Application.Octet.Equals(file.ContentType, StringComparison.OrdinalIgnoreCase))
-            {
-                var bestMatch = _contentInspector.Inspect(file.Content).ByMimeType().FirstOrDefault();
-                if (null != bestMatch && !string.IsNullOrEmpty(bestMatch.MimeType))
-                    file.ContentType = bestMatch.MimeType;
-            }
+            var bestMatch = _contentInspector.Inspect(bytes).ByMimeType().FirstOrDefault();
+            var contentType = null != bestMatch && !string.IsNullOrEmpty(bestMatch.MimeType)
+                ? bestMatch.MimeType
+                : MediaTypeNames.Application.Octet;
 
             await _memoService.ProcessFileMessage(accessToken, 
-                new MemogramService.FileInfo { FilePath = file.FilePath, Content = file.Content, ContentType = file.ContentType},
+                new MemogramService.FileInfo { FilePath = filepath, Content = bytes, ContentType = contentType },
                 chatId, fileId, memo, ct);
         }
         catch (Exception ex)

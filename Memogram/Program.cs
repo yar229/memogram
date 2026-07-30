@@ -2,6 +2,7 @@
 using Memogram.Clients.Memos;
 using Memogram.Configs;
 using Memogram.Services;
+using Memogram.Services.Memos;
 using Memogram.Services.Telegram;
 using Memogram.Services.UserStore;
 using Microsoft.Extensions.Configuration;
@@ -22,43 +23,24 @@ try
             .ReadFrom.Configuration(context.Configuration))
         .ConfigureAppConfiguration((context, config) =>
         {
-            config.Sources.Clear();
             config.SetBasePath(AppContext.BaseDirectory);
             config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: false);
             config.AddJsonFile($"appsettings.{context.HostingEnvironment.EnvironmentName}.json", optional: true, reloadOnChange: false);
         })
         .ConfigureServices((context, services) =>
         {
-            services.Configure<MemogramConfig>(context.Configuration.GetSection("Memogram"));
-            services.AddSingleton(sp =>
-            {
-                var memogram = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<MemogramConfig>>().Value;
-                memogram.Validate();
-                return memogram;
-            });
-            services.Configure<TelegramConfig>(context.Configuration.GetSection("Telegram"));
-            services.AddSingleton(sp =>
-            {
-                var telegram = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<TelegramConfig>>().Value;
-                telegram.Validate();
-                return telegram;
-            });
-            services.Configure<LocalStorageConfig>(context.Configuration.GetSection("LocalStorage"));
-            services.AddSingleton(sp =>
-            {
-                var localStorage = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LocalStorageConfig>>().Value;
-                localStorage.Validate();
-                return localStorage;
-            });
-
-            services.AddSingleton(sp => new ContentInspectorBuilder
-            {
-                Definitions = MimeDetective.Definitions.DefaultDefinitions.All()
-            }.Build());
-            services.AddSingleton<UserStoreService>();
+            services.ConfigureAndValidate<MemogramConfig>(context);
             services.AddSingleton<MemosClient>();
             services.AddSingleton<MemogramService>();
+
+            services.ConfigureAndValidate<TelegramConfig>(context);
+            services.AddTelegramClient("telegram_bot_client");
             services.AddSingleton<TelegramService>();
+
+            services.ConfigureAndValidate<LocalStorageConfig>(context);
+            services.AddSingleton<UserStoreService>();
+
+            services.AddSingleton(sp => new ContentInspectorBuilder { Definitions = MimeDetective.Definitions.DefaultDefinitions.All() }.Build());
             services.AddSingleton<MainService>();
         })
         .Build();

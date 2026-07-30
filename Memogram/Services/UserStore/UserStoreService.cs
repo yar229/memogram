@@ -16,9 +16,9 @@ public class UserStoreService
     private readonly ConcurrentDictionary<long, string> _userAccessTokenCache = new();
     private readonly ILogger<UserStoreService> _logger;
 
-    public void Init()
+    public Task InitializeAsync()
     {
-        LoadFromFile();
+        return LoadFromFileAsync();
     }
 
     public bool TryGetUserAccessToken(long userId, out string? accessToken)
@@ -26,21 +26,22 @@ public class UserStoreService
         return _userAccessTokenCache.TryGetValue(userId, out accessToken);
     }
 
-    public void SetUserAccessToken(long userId, string accessToken)
+    public Task SetUserAccessTokenAsync(long userId, string accessToken)
     {
         _userAccessTokenCache[userId] = accessToken;
-        SaveToFile();
+        return SaveToFileAsync();
     }
 
-    private void LoadFromFile()
+    private async Task LoadFromFileAsync()
     {
+        _logger.LogInformation($"Loading users data from {_dataPath}");
         if (!File.Exists(_dataPath))
         {
-            File.WriteAllText(_dataPath, string.Empty);
+            await File.WriteAllTextAsync(_dataPath, string.Empty);
             return;
         }
 
-        foreach (var line in File.ReadLines(_dataPath))
+        await foreach (string line in File.ReadLinesAsync(_dataPath))
         {
             var trimmed = line.Trim();
             if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith('#'))
@@ -54,7 +55,7 @@ public class UserStoreService
         }
     }
 
-    private void SaveToFile()
+    private async Task SaveToFileAsync()
     {
         var dir = Path.GetDirectoryName(_dataPath) ?? ".";
         var tmpFile = Path.Combine(dir, $"memogram-{Guid.NewGuid():N}.tmp");
@@ -66,7 +67,7 @@ public class UserStoreService
             {
                 foreach (var entry in entries)
                 {
-                    writer.WriteLine($"{entry.Key}:{entry.Value}");
+                    await writer.WriteLineAsync($"{entry.Key}:{entry.Value}");
                 }
             }
             File.Move(tmpFile, _dataPath, overwrite: true);

@@ -8,24 +8,24 @@ using System.Text.RegularExpressions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
-namespace Memogram;
+namespace Memogram.Services.Memos;
 
 public partial class MemogramService : IDisposable
 {
     private static readonly Dictionary<MessageEntityType, Func<string, string, string, MessageEntity, string>> EntityConverters = new()
     {
-        [MessageEntityType.Url] = (string p, string c, string s, MessageEntity entity) => $"{p}[{c}]({c}){s}",
-        [MessageEntityType.TextLink] = (string p, string c, string s, MessageEntity entity) => $"{p}[{c}]({entity.Url}){s}",
-        [MessageEntityType.Bold] = (string p, string c, string s, MessageEntity entity) => $"{p}**{c}**{s}",
-        [MessageEntityType.Italic] = (string p, string c, string s, MessageEntity entity) => $"{p}*{c}*{s}",
-        [MessageEntityType.Underline] = (string p, string c, string s, MessageEntity entity) => $"{p}<ins>{c}</ins>{s}",
-        [MessageEntityType.Strikethrough] = (string p, string c, string s, MessageEntity entity) => $"{p}~~{c}~~{s}",
-        [MessageEntityType.Spoiler] = (string p, string c, string s, MessageEntity entity) => $"{p}[{c}](#spoiler){s}",
-        [MessageEntityType.DateTime] = (string p, string c, string s, MessageEntity entity) => $"{p}{c}({entity.UnixTime}){s}",
-        [MessageEntityType.Blockquote] = (string p, string c, string s, MessageEntity entity) => $"{p}\n> {c}\n\n{s}",
-        [MessageEntityType.Code] = (string p, string c, string s, MessageEntity entity) => $"{p}`{c}`{s}",
-        [MessageEntityType.Pre] = (string p, string c, string s, MessageEntity entity) => $"{p}```\n{c}\n```{s}",
-        [MessageEntityType.Mention] = (string p, string c, string s, MessageEntity entity) => $"{p}[{c}](https://t.me/{c[1..]}){s}",
+        [MessageEntityType.Url] = static (string p, string c, string s, MessageEntity entity) => $"{p}[{c}]({c}){s}",
+        [MessageEntityType.TextLink] = static (string p, string c, string s, MessageEntity entity) => $"{p}[{c}]({entity.Url}){s}",
+        [MessageEntityType.Bold] = static (string p, string c, string s, MessageEntity entity) => $"{p}**{c}**{s}",
+        [MessageEntityType.Italic] = static (string p, string c, string s, MessageEntity entity) => $"{p}*{c}*{s}",
+        [MessageEntityType.Underline] = static (string p, string c, string s, MessageEntity entity) => $"{p}<ins>{c}</ins>{s}",
+        [MessageEntityType.Strikethrough] = static (string p, string c, string s, MessageEntity entity) => $"{p}~~{c}~~{s}",
+        [MessageEntityType.Spoiler] = static (string p, string c, string s, MessageEntity entity) => $"{p}[{c}](#spoiler){s}",
+        [MessageEntityType.DateTime] = static (string p, string c, string s, MessageEntity entity) => $"{p}{c}({entity.UnixTime}){s}",
+        [MessageEntityType.Blockquote] = static (string p, string c, string s, MessageEntity entity) => $"{p}\n> {c}\n\n{s}",
+        [MessageEntityType.Code] = static (string p, string c, string s, MessageEntity entity) => $"{p}`{c}`{s}",
+        [MessageEntityType.Pre] = static (string p, string c, string s, MessageEntity entity) => $"{p}```\n{c}\n```{s}",
+        [MessageEntityType.Mention] = static (string p, string c, string s, MessageEntity entity) => $"{p}[{c}](https://t.me/{c[1..]}){s}",
     };
     private readonly MemosClient _memosClient;
     private readonly MemogramConfig _config;

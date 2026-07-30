@@ -1,7 +1,9 @@
 ﻿namespace Memogram.Configs;
 
-public class MemogramConfig
+public class MemogramConfig : IValidableConfig
 {
+    public static string SectionName => "Memogram";
+
     public required string ServerAddr { get; set; } = string.Empty;
     public string[] TagsToAdd { get; set; } = Array.Empty<string>();
 

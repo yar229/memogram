@@ -1,7 +1,9 @@
 ﻿namespace Memogram.Configs;
 
-public class TelegramConfig
+public class TelegramConfig : IValidableConfig
 {
+    public static string SectionName => "Telegram";
+
     public required string BotToken { get; set; } = string.Empty;
     public string? BotProxyAddr { get; set; } = string.Empty;
     public string? Proxy { get; set; } = string.Empty;
