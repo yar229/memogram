@@ -16,11 +16,6 @@ public class UserStoreService
     private readonly ConcurrentDictionary<long, string> _userAccessTokenCache = new();
     private readonly ILogger<UserStoreService> _logger;
 
-    public UserStoreService(string dataPath)
-    {
-        _dataPath = dataPath;
-    }
-
     public void Init()
     {
         LoadFromFile();

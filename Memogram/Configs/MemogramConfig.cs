@@ -3,9 +3,9 @@
 public class MemogramConfig
 {
     public string ServerAddr { get; set; } = string.Empty;
-    public string Data { get; set; } = "data.txt";
-
     public string[] TagsToAdd { get; set; } = Array.Empty<string>();
+
+    public TimeSpan MediaCacheTtl { get; set; }
 
     public void Validate()
     {

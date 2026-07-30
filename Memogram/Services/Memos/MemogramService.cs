@@ -31,19 +31,54 @@ public partial class MemogramService
     private readonly MemogramConfig _config;
     private readonly ILogger<MemogramService> _logger;
 
-    private readonly object _mediaGroupMutex = new();
-    private readonly ConcurrentDictionary<string, Memo> _mediaGroupCache = new();
+    private static readonly TimeSpan MediaGroupTtl = TimeSpan.FromSeconds(30);
+    private readonly ConcurrentDictionary<string, (Memo Memo, DateTime Created)> _mediaGroupCache = new();
     private readonly ConcurrentDictionary<string, MemosClient> _authClientCache = new(StringComparer.Ordinal);
 
-    public InstanceProfile? InstanceProfile { get; set; }
+    private InstanceProfile? _instanceProfile;
+    private readonly SemaphoreSlim _initLock = new(1, 1);
+    private Timer? _cacheCleanupTimer;
+
+    public InstanceProfile? InstanceProfile => _instanceProfile;
 
     public MemogramService(MemosClient memosClient,  MemogramConfig config, ILogger<MemogramService> logger)
     {
         _memosClient = memosClient;
         _config = config;
         _logger = logger;
+    }
 
-        InstanceProfile = GetInstanceProfileAsync(CancellationToken.None).Result; //TODO:!!!!
+    public async Task InitializeAsync(CancellationToken ct)
+    {
+        if (_instanceProfile is not null) return;
+        await _initLock.WaitAsync(ct);
+        try
+        {
+            if (_instanceProfile is not null) return;
+            _instanceProfile = await GetInstanceProfileAsync(ct);
+            _cacheCleanupTimer = new Timer(_ => EvictExpiredCache(), null, _config.MediaCacheTtl, _config.MediaCacheTtl);
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+    }
+
+    private void EvictExpiredCache()
+    {
+        int totalCount = _mediaGroupCache.Count;
+        int deletedCount = 0;
+        var cutoff = DateTime.UtcNow - MediaGroupTtl;
+        foreach (var kvp in _mediaGroupCache)
+        {
+            if (kvp.Value.Created < cutoff)
+            {
+                if (_mediaGroupCache.TryRemove(kvp.Key, out _))
+                    deletedCount++;
+            }
+        }
+        if (deletedCount > 0)
+            _logger.LogDebug($"MediaCache cleanup: deleted {deletedCount} of {totalCount}");
     }
 
 
@@ -99,16 +134,13 @@ public partial class MemogramService
 
         if (!string.IsNullOrEmpty(mediaGroupId))
         {
-            lock (_mediaGroupMutex)
+            if (_mediaGroupCache.TryGetValue(mediaGroupId, out var cached))
             {
-                if (_mediaGroupCache.TryGetValue(mediaGroupId, out var cached))
-                {
-                    return cached;
-                }
+                return cached.Memo;
             }
 
             var memo = await memoClient.CreateMemoAsync(content, tags: _config.TagsToAdd, ct: ct);
-            _mediaGroupCache[mediaGroupId] = memo;
+            _mediaGroupCache[mediaGroupId] = (memo, DateTime.UtcNow);
             return memo;
         }
 
@@ -282,7 +314,7 @@ public partial class MemogramService
             : segment;
     }
 
-    [GeneratedRegex(@"(?s)^(\s*)(.*?)(\s*)$")]
+    [GeneratedRegex(@"(?s)^(\s*)(.*)(\s*)$")]
     private static partial Regex EntityRegex();
 
     public class FileInfo

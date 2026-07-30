@@ -36,6 +36,8 @@ public partial class MainService
     public async Task Start(CancellationToken ct = default)
     {
         _logger.LogInformation("Memogram starting...");
+
+        await _memoService.InitializeAsync(ct);
         _logger.LogInformation("Instance profile: {Profile}", JsonSerializer.Serialize(_memoService.InstanceProfile));
 
         _ = _tgService.Start(
@@ -231,7 +233,7 @@ public partial class MainService
             ct
         );
 
-        await _tgService.AnswerCallbackQuery(callbackQuery.Id, "Memo updated", showAlert: true, ct);
+        await _tgService.AnswerCallbackQuery(callbackQuery.Id, "Memo updated", showAlert: false, ct);
     }
 
     private async Task ProcessFileMessage(string accessToken, long chatId, string fileId, Memo memo, CancellationToken ct)

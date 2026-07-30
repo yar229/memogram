@@ -18,10 +18,9 @@ public class TelegramService
     private readonly HttpClient _tgHttpClient;
     private readonly TelegramBotClient _bot;
     private readonly HashSet<string> _allowedUsernames;
-    private BotCommandHandler[] _botCommands;
-
-    private Func<Message, CancellationToken, Task> _handleMessage;
-    private Func<CallbackQuery, CancellationToken, Task> _handleCallback;
+    private BotCommandHandler[] _botCommands = null!;
+    private Func<Message, CancellationToken, Task> _handleMessage = null!;
+    private Func<CallbackQuery, CancellationToken, Task> _handleCallback = null!;
 
     public TelegramService(TelegramConfig config, ILogger<TelegramService> logger)
     {

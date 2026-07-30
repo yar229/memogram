@@ -5,7 +5,7 @@ namespace Memogram.Services.Telegram;
 
 class BotCommandHandler
 {
-    public BotCommand Command { get; set; }
-    public Func<Message, string, CancellationToken, Task> Handler { get; set; }
+    public required BotCommand Command { get; init; }
+    public required Func<Message, string, CancellationToken, Task> Handler { get; init; }
 }
 

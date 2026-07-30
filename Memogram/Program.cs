@@ -43,7 +43,7 @@ try
                 telegram.Validate();
                 return telegram;
             });
-            services.Configure<TelegramConfig>(context.Configuration.GetSection("LocalStorage"));
+            services.Configure<LocalStorageConfig>(context.Configuration.GetSection("LocalStorage"));
             services.AddSingleton(sp =>
             {
                 var localStorage = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<LocalStorageConfig>>().Value;
