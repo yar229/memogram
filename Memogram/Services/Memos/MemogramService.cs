@@ -3,7 +3,6 @@ using Memogram.Clients.Memos.Models;
 using Memogram.Configs;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
-using System.Collections.Concurrent;
 using System.Text;
 using System.Text.RegularExpressions;
 using Telegram.Bot.Types;
@@ -34,8 +33,6 @@ public partial class MemogramService : IDisposable
 
     private readonly MemoryCache _mediaGroupCache = new(new MemoryCacheOptions());
     private readonly TimeSpan _mediaGroupCacheTtl;
-
-    private readonly ConcurrentDictionary<string, MemosClient> _authClientCache = new(StringComparer.Ordinal);
 
     private InstanceProfile? _instanceProfile;
     private readonly SemaphoreSlim _initLock = new(1, 1);
@@ -93,29 +90,24 @@ public partial class MemogramService : IDisposable
 
 
 
-    private MemosClient GetAuthenticatedClient(string accessToken)
-    {
-        return _authClientCache.GetOrAdd(accessToken, token => _memosClient.WithAuthentication(token));
-    }
-
     public Task<Clients.Memos.Models.User> GetCurrentUserAsync(string accessToken, CancellationToken ct = default)
     {
-        return GetAuthenticatedClient(accessToken).GetCurrentUserAsync(ct);
+        return _memosClient.GetCurrentUserAsync(accessToken, ct);
     }
 
     public Task<Memo> GetMemoAsync(string accessToken, string name, CancellationToken ct = default)
     {
-        return GetAuthenticatedClient(accessToken).GetMemoAsync(name, ct);
+        return _memosClient.GetMemoAsync(accessToken, name, ct);
     }
 
     public Task<Memo> UpdateMemoAsync(string accessToken, Memo memo, CancellationToken ct = default)
     {
-        return GetAuthenticatedClient(accessToken).UpdateMemoAsync(memo, ct);
+        return _memosClient.UpdateMemoAsync(accessToken, memo, ct);
     }
 
     public Task<List<Memo>> ListMemosAsync(string accessToken, int pageSize = 10, string? filter = null, CancellationToken ct = default)
     {
-        return GetAuthenticatedClient(accessToken).ListMemosAsync(pageSize, filter, ct);
+        return _memosClient.ListMemosAsync(accessToken, pageSize, filter, ct);
     }
 
     public async Task<Memo> HandleMemoCreation(string accessToken, string? mediaGroupId, string content, CancellationToken ct)
@@ -125,21 +117,18 @@ public partial class MemogramService : IDisposable
             if (_mediaGroupCache.TryGetValue(mediaGroupId, out var cached) && cached is Memo cachedMemo)
                 return cachedMemo;
 
-            var memoClientA = GetAuthenticatedClient(accessToken!);
-            var createdMemo = await memoClientA.CreateMemoAsync(content, tags: _config.TagsToAdd, ct: ct);
+            var createdMemo = await _memosClient.CreateMemoAsync(accessToken, content, tags: _config.TagsToAdd, ct: ct);
             _mediaGroupCache.Set(mediaGroupId, createdMemo, _mediaGroupCacheTtl);
             return createdMemo;
         }
 
-        var memoClient = GetAuthenticatedClient(accessToken!);
-        return await memoClient.CreateMemoAsync(content, tags: _config.TagsToAdd, ct: ct);
+        return await _memosClient.CreateMemoAsync(accessToken, content, tags: _config.TagsToAdd, ct: ct);
     }
 
     public async Task ProcessFileMessage(string accessToken, FileInfo file, long chatId, string fileId, Memo memo, CancellationToken ct)
     {
-        var memosClient = GetAuthenticatedClient(accessToken!);
-
-        await memosClient.CreateAttachmentAsync(
+        await _memosClient.CreateAttachmentAsync(
+            accessToken,
             filename: Path.GetFileName(file.FilePath),
             contentType: file.ContentType,
             content: file.Content,

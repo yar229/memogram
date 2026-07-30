@@ -70,13 +70,6 @@ public class MemosClient
     {
     }
 
-    public MemosClient WithAuthentication(string accessToken)
-    {
-        var handler = new AuthenticatedHandler(accessToken);
-        var client = new HttpClient(handler);
-        return new MemosClient(_baseUrl, client, _logger);
-    }
-
     public async Task<InstanceProfile> GetInstanceProfileAsync(CancellationToken ct = default)
     {
         var response = await RetryAsync(ct2 => _httpClient.GetAsync(Url("/api/v1/instance/profile"), ct2), ct);
@@ -84,15 +77,15 @@ public class MemosClient
         return (await response.Content.ReadFromJsonAsync<InstanceProfile>(cancellationToken: ct))!;
     }
 
-    public async Task<User> GetCurrentUserAsync(CancellationToken ct = default)
+    public async Task<User> GetCurrentUserAsync(string accessToken, CancellationToken ct = default)
     {
-        var response = await RetryAsync(ct2 => _httpClient.GetAsync(Url("/api/v1/auth/me"), ct2), ct);
+        var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Get, Url("/api/v1/auth/me"), accessToken, ct2), ct);
         response.EnsureSuccessStatusCode();
         var wrapper = await response.Content.ReadFromJsonAsync<UserWrapper>(cancellationToken: ct);
         return wrapper?.User ?? throw new InvalidOperationException("No user in response");
     }
 
-    public async Task<Memo> CreateMemoAsync(string content, string visibility = "PRIVATE", IEnumerable<string>? tags = null, CancellationToken ct = default)
+    public async Task<Memo> CreateMemoAsync(string accessToken, string content, string visibility = "PRIVATE", IEnumerable<string>? tags = null, CancellationToken ct = default)
     {
         bool doAddTags = tags?.Any() ?? false;
         StringBuilder? sb = null;
@@ -109,21 +102,21 @@ public class MemosClient
             Content = doAddTags ? sb!.ToString() : content,
             Visibility = visibility,
         };
-        var response = await RetryAsync(ct2 => _httpClient.PostAsJsonAsync(Url("/api/v1/memos"), body, ct2), ct);
+        var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Post, Url("/api/v1/memos"), accessToken, body, ct2), ct);
         response.EnsureSuccessStatusCode();
         var memo = await response.Content.ReadFromJsonAsync<Memo>(cancellationToken: ct);
         return memo ?? throw new InvalidOperationException("No memo in response");
     }
 
-    public async Task<Memo> GetMemoAsync(string name, CancellationToken ct = default)
+    public async Task<Memo> GetMemoAsync(string accessToken, string name, CancellationToken ct = default)
     {
-        var response = await RetryAsync(ct2 => _httpClient.GetAsync(Url($"/api/v1/{name}"), ct2), ct);
+        var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Get, Url($"/api/v1/{name}"), accessToken, ct2), ct);
         response.EnsureSuccessStatusCode();
         var wrapper = await response.Content.ReadFromJsonAsync<Memo>(cancellationToken: ct);
         return wrapper ?? throw new InvalidOperationException("No memo in response");
     }
 
-    public async Task<Memo> UpdateMemoAsync(Memo memo, CancellationToken ct = default)
+    public async Task<Memo> UpdateMemoAsync(string accessToken, Memo memo, CancellationToken ct = default)
     {
         var body = new UpdateMemoRequest
         {
@@ -131,26 +124,26 @@ public class MemosClient
             Visibility = memo.Visibility,
             Pinned = memo.Pinned,
         };
-        var response = await RetryAsync(ct2 => _httpClient.PatchAsJsonAsync(Url($"/api/v1/{memo.Name}"), body, ct2), ct);
+        var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Patch, Url($"/api/v1/{memo.Name}"), accessToken, body, ct2), ct);
         response.EnsureSuccessStatusCode();
         var wrapper = await response.Content.ReadFromJsonAsync<Memo>(cancellationToken: ct);
         return wrapper ?? throw new InvalidOperationException("No memo in response");
     }
 
-    public async Task<List<Memo>> ListMemosAsync(int pageSize = 10, string? filter = null, CancellationToken ct = default)
+    public async Task<List<Memo>> ListMemosAsync(string accessToken, int pageSize = 10, string? filter = null, CancellationToken ct = default)
     {
         var url = $"/api/v1/memos?pageSize={pageSize}";
         if (!string.IsNullOrEmpty(filter))
         {
             url += $"&filter={Uri.EscapeDataString(filter)}";
         }
-        var response = await RetryAsync(ct2 => _httpClient.GetAsync(Url(url), ct2), ct);
+        var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Get, Url(url), accessToken, ct2), ct);
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<ListMemosResponse>(cancellationToken: ct);
         return result?.Memos ?? new List<Memo>();
     }
 
-    public async Task<CreateAttachmentResponse> CreateAttachmentAsync(string filename, string contentType, byte[] content, string? memoName = null, CancellationToken ct = default)
+    public async Task<CreateAttachmentResponse> CreateAttachmentAsync(string accessToken, string filename, string contentType, byte[] content, string? memoName = null, CancellationToken ct = default)
     {
         var body = new CreateAttachmentRequest
         {
@@ -159,32 +152,31 @@ public class MemosClient
             Type = contentType,
             Content = content
         };
-        var response = await RetryAsync(ct2 => _httpClient.PostAsJsonAsync(Url("/api/v1/attachments"), body, ct2), ct);
+        var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Post, Url("/api/v1/attachments"), accessToken, body, ct2), ct);
         response.EnsureSuccessStatusCode();
         var res = await response.Content.ReadFromJsonAsync<CreateAttachmentResponse>(cancellationToken: ct);
         return res ?? throw new InvalidOperationException("No attachment in response");
+    }
+
+    private async Task<HttpResponseMessage> SendWithAuthAsync(HttpMethod method, string url, string accessToken, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(method, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        return await _httpClient.SendAsync(request, ct);
+    }
+
+    private async Task<HttpResponseMessage> SendWithAuthAsync<T>(HttpMethod method, string url, string accessToken, T body, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(method, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Content = JsonContent.Create(body);
+        return await _httpClient.SendAsync(request, ct);
     }
 
     private async Task<HttpResponseMessage> RetryAsync(Func<CancellationToken, Task<HttpResponseMessage>> request, CancellationToken ct)
     {
         return await _retryPipeline.ExecuteAsync(
             ct2 => new ValueTask<HttpResponseMessage>(request(ct2)), ct);
-    }
-
-    private class AuthenticatedHandler : DelegatingHandler
-    {
-        private readonly string _token;
-
-        public AuthenticatedHandler(string token) : base(new HttpClientHandler())
-        {
-            _token = token;
-        }
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
-            return await base.SendAsync(request, cancellationToken);
-        }
     }
 
     private string Url(string path)
