@@ -122,8 +122,9 @@ public class TelegramService
 
     public async Task SendMemoMessage(string baseUrl, string memoUrl, string content, long chatId, CancellationToken ct)
     {
-        string trimmedContent = content.Length > 200
-            ? $"{content[..200]}..."
+        int trimCount = _config.SearchReplyMessagesTrim;
+        string trimmedContent = content.Length > trimCount
+            ? $"{content[..trimCount]}..."
             : content;
         string tgMessage = $"[🔗]({baseUrl}/{memoUrl}) {trimmedContent.TrimEnd()}";
 
@@ -234,7 +235,6 @@ public class TelegramService
         return Task.CompletedTask;
     }
 
-
     private async Task<bool> ProcessBotCommand(Message message, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(message.Text))
@@ -255,11 +255,12 @@ public class TelegramService
         return true;
     }
 
-
-
-    private static HashSet<string> ParseAllowedUsernames(string raw)
+    private static HashSet<string> ParseAllowedUsernames(string? raw)
     {
         var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrEmpty(raw))
+            return allowed;
+
         foreach (var entry in raw.Split(','))
         {
             var trimmed = entry.Trim().ToLowerInvariant();
@@ -271,7 +272,7 @@ public class TelegramService
         return allowed;
     }
 
-    private static HttpClientHandler CreateHttpClientHandler(string proxyUrl)
+    private static HttpClientHandler CreateHttpClientHandler(string? proxyUrl)
     {
         if (string.IsNullOrWhiteSpace(proxyUrl))
             return new HttpClientHandler();
@@ -279,6 +280,4 @@ public class TelegramService
         var proxy = new WebProxy(proxyUrl);
         return new HttpClientHandler { Proxy = proxy, UseProxy = true };
     }
-
-
 }
