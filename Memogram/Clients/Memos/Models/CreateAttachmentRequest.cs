@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace Memogram.Clients.Memos.Models;
 
@@ -14,7 +14,8 @@ public class CreateAttachmentRequest
     /// The content of the attachment.
     /// </summary>
     [JsonPropertyName("content")]
-    public required byte[] Content { get; set; }
+    [JsonConverter(typeof(JsonStreamConverter))]
+    public required Stream Content { get; set; }
 
     /// <summary>
     /// The MIME type of the attachment.

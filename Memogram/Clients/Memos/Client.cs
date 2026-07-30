@@ -143,7 +143,7 @@ public class MemosClient
         return result?.Memos ?? new List<Memo>();
     }
 
-    public async Task<CreateAttachmentResponse> CreateAttachmentAsync(string accessToken, string filename, string contentType, byte[] content, string? memoName = null, CancellationToken ct = default)
+    public async Task<CreateAttachmentResponse> CreateAttachmentAsync(string accessToken, string filename, string contentType, Stream content, string? memoName = null, CancellationToken ct = default)
     {
         var body = new CreateAttachmentRequest
         {

@@ -300,7 +300,7 @@ public partial class MemogramService : IDisposable
     public class FileInfo
     {
         public required string FilePath { get; init; }
-        public required byte[] Content { get; init; }
+        public required Stream Content { get; init; }
         public required string ContentType { get; init; }
     }
 }
