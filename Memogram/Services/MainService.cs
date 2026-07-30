@@ -5,7 +5,6 @@ using Microsoft.Extensions.Logging;
 using MimeDetective;
 using System.Net.Mime;
 using System.Text.Json;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
@@ -41,19 +40,22 @@ public partial class MainService
         _logger.LogInformation("Memogram starting...");
         _logger.LogInformation("Instance profile: {Profile}", JsonSerializer.Serialize(_memoService.InstanceProfile));
 
-        _ = _tgService.Start(StartHandler, SearchHandler, HandleMessageAsync, HandleCallbackQueryAsync, ct);
+        _ = _tgService.Start(
+            StartHandler, SearchHandler, 
+            HandleMessageAsync, HandleCallbackQueryAsync, 
+            ct);
 
         await Task.Delay(Timeout.Infinite, ct);
     }
 
-    private async Task HandleMessageAsync(ITelegramBotClient bot, Message message, CancellationToken ct)
+    private async Task HandleMessageAsync(Message message, CancellationToken ct)
     {
         var chatId = message.Chat.Id;
         var from = message.From!;
 
         if (!_storeService.TryGetUserAccessToken(from.Id, out var accessToken) || string.IsNullOrEmpty(accessToken))
         {
-            await bot.SendMessage(chatId, "Please start the bot with /start <access_token>", cancellationToken: ct);
+            await _tgService.SendMessage(chatId, "Please start the bot with /start <access_token>", ct);
             return;
         }
 
@@ -66,7 +68,7 @@ public partial class MainService
 
         if (string.IsNullOrEmpty(content) && !hasAttachment)
         {
-            await bot.SendMessage(chatId, "Please input memo content", cancellationToken: ct);
+            await _tgService.SendMessage(chatId, "Please input memo content", ct);
             return;
         }
 
@@ -77,35 +79,35 @@ public partial class MainService
         }
         catch (Exception)
         {
-            await bot.SendMessage(chatId, "Failed to create memo", cancellationToken: ct);
+            await _tgService.SendMessage(chatId, "Failed to create memo", ct);
             return;
         }
 
         if (message.Document is not null)
-            await ProcessFileMessage(accessToken!, bot, chatId, message.Document.FileId, memo, ct);
+            await ProcessFileMessage(accessToken!, chatId, message.Document.FileId, memo, ct);
         if (message.Voice is not null)
-            await ProcessFileMessage(accessToken!, bot, chatId, message.Voice.FileId, memo, ct);
+            await ProcessFileMessage(accessToken!, chatId, message.Voice.FileId, memo, ct);
         if (message.Video is not null)
-            await ProcessFileMessage(accessToken!, bot, chatId, message.Video.FileId, memo, ct);
+            await ProcessFileMessage(accessToken!, chatId, message.Video.FileId, memo, ct);
         if (message.Photo?.Length > 0)
         {
             var photo = message.Photo[^1];
-            await ProcessFileMessage(accessToken!, bot, chatId, photo.FileId, memo, ct);
+            await ProcessFileMessage(accessToken!, chatId, photo.FileId, memo, ct);
         }
 
         var memoUid = _memoService.ExtractMemoUidFromName(memo.Name);
         string msg = $"Content saved as {memo.Visibility} with [{memo.Name}]({_memoService.BaseUrl}/memos/{memoUid})";
-        await _tgService.SendMessageSaved(bot, message, chatId, memo, msg, ct);
+        await _tgService.SendMessageSaved(message, chatId, memo, msg, ct);
     }
 
-    public async Task StartHandler(ITelegramBotClient bot, Message message, string accessToken, CancellationToken ct)
+    public async Task StartHandler(Message message, string accessToken, CancellationToken ct)
     {
         var chatId = message.Chat.Id;
         accessToken = accessToken.Trim();
 
         if (string.IsNullOrEmpty(accessToken))
         {
-            await bot.SendMessage(chatId, "Usage: /start <access_token>", cancellationToken: ct);
+            await _tgService.SendMessage(chatId, "Usage: /start <access_token>", ct);
             return;
         }
 
@@ -113,27 +115,27 @@ public partial class MainService
         {
             var user = await _memoService.GetCurrentUserAsync(accessToken, ct);
             _storeService.SetUserAccessToken(message.From!.Id, accessToken);
-            await bot.SendMessage(chatId, $"Hello {user.DisplayName}!", cancellationToken: ct);
+            await _tgService.SendMessage(chatId, $"Hello {user.DisplayName}!", ct);
         }
         catch
         {
-            await bot.SendMessage(chatId, "Invalid access token", cancellationToken: ct);
+            await _tgService.SendMessage(chatId, "Invalid access token", ct);
         }
     }
 
-    private async Task SearchHandler(ITelegramBotClient bot, Message message, string searchString, CancellationToken ct)
+    private async Task SearchHandler(Message message, string searchString, CancellationToken ct)
     {
         var chatId = message.Chat.Id;
 
         if (string.IsNullOrEmpty(searchString))
         {
-            await bot.SendMessage(chatId, "Usage: /search <words>", cancellationToken: ct);
+            await _tgService.SendMessage(chatId, "Usage: /search <words>", ct);
             return;
         }
 
         if (!_storeService.TryGetUserAccessToken(message.From!.Id, out var accessToken) || string.IsNullOrEmpty(accessToken))
         {
-            await bot.SendMessage(chatId, "Please start the bot with /start <access_token>", cancellationToken: ct);
+            await _tgService.SendMessage(chatId, "Please start the bot with /start <access_token>", ct);
             return;
         }
 
@@ -144,34 +146,22 @@ public partial class MainService
         }
         catch
         {
-            await bot.SendMessage(chatId, "Invalid access token", cancellationToken: ct);
+            await _tgService.SendMessage(chatId, "Invalid access token", ct);
             return;
         }
 
-        var filter = _memoService.BuildMemoSearchFilter(searchString, user);
-        var memos = await _memoService.ListMemosAsync(accessToken!, pageSize: 10, filter: filter, ct);
+        var memos = await _memoService.SearchMemoAsync(searchString, accessToken!, user.Name, user.Username, ct);
 
         if (memos.Count == 0)
-            await bot.SendMessage(chatId, "No memos found for the specified search criteria.", cancellationToken: ct);
+            await _tgService.SendMessage(chatId, "No memos found for the specified search criteria.", ct);
         else
         {
             foreach (var memo in memos)
-            {
-                string trimmedContent = memo.Content.Length > 200
-                    ? $"{memo.Content[..200]}..."
-                    : memo.Content;
-                string tgMessage = $"[🔗]({_memoService.BaseUrl}/{memo.Name}) {trimmedContent.TrimEnd()}";
-
-                await bot.SendMessage(chatId, tgMessage, 
-                    parseMode: ParseMode.Markdown, 
-                    disableNotification: true,
-                    linkPreviewOptions: LinkPreviewOptions.Disabled,
-                    cancellationToken: ct);
-            }
+                await _tgService.SendMemoMessage(_memoService.BaseUrl, memo.Name, memo.Content, chatId, ct);
         }
     }
 
-    private async Task HandleCallbackQueryAsync(ITelegramBotClient bot, CallbackQuery callbackQuery, CancellationToken ct)
+    private async Task HandleCallbackQueryAsync(CallbackQuery callbackQuery, CancellationToken ct)
     {
         var data = callbackQuery.Data ?? "";
         var userId = callbackQuery.From.Id;
@@ -180,14 +170,14 @@ public partial class MainService
 
         if (!_storeService.TryGetUserAccessToken(userId, out var accessToken) || string.IsNullOrEmpty(accessToken))
         {
-            await bot.AnswerCallbackQuery(callbackQuery.Id, "Please start the bot with /start <access_token>", showAlert: true, cancellationToken: ct);
+            await _tgService.AnswerCallbackQuery(callbackQuery.Id, "Please start the bot with /start <access_token>", showAlert: true, ct);
             return;
         }
 
         var parts = data.Split(' ');
         if (parts.Length != 2)
         {
-            await bot.AnswerCallbackQuery(callbackQuery.Id, "Invalid command", showAlert: true, cancellationToken: ct);
+            await _tgService.AnswerCallbackQuery(callbackQuery.Id, "Invalid command", showAlert: true, ct);
             return;
         }
 
@@ -201,7 +191,7 @@ public partial class MainService
         }
         catch
         {
-            await bot.AnswerCallbackQuery(callbackQuery.Id, $"Memo {memoName} not found", showAlert: true, cancellationToken: ct);
+            await _tgService.AnswerCallbackQuery(callbackQuery.Id, $"Memo {memoName} not found", true, ct);
             return;
         }
 
@@ -220,7 +210,7 @@ public partial class MainService
                 memo.Pinned = !memo.Pinned;
                 break;
             default:
-                await bot.AnswerCallbackQuery(callbackQuery.Id, "Unknown action", showAlert: true, cancellationToken: ct);
+                await _tgService.AnswerCallbackQuery(callbackQuery.Id, "Unknown action", showAlert: true, ct);
                 return;
         }
 
@@ -230,27 +220,27 @@ public partial class MainService
         }
         catch
         {
-            await bot.AnswerCallbackQuery(callbackQuery.Id, "Failed to update memo", showAlert: true, cancellationToken: ct);
+            await _tgService.AnswerCallbackQuery(callbackQuery.Id, "Failed to update memo", showAlert: true, ct);
             return;
         }
 
         var pinnedMarker = memo.Pinned ? "📌" : "";
         var memoUid = _memoService.ExtractMemoUidFromName(memo.Name);
         var inlineKeyboard = _tgService.BuildKeyboard(memo);
-        await bot.EditMessageText(chatId, messageId,
+        await _tgService.EditMessageText(chatId, messageId,
             $"Memo updated as {memo.Visibility} with [{memo.Name}]({_memoService.BaseUrl}/memos/{memoUid}) {pinnedMarker}",
-            parseMode: ParseMode.Markdown, replyMarkup: inlineKeyboard,
-            cancellationToken: ct
+            ParseMode.Markdown, inlineKeyboard,
+            ct
         );
 
-        await bot.AnswerCallbackQuery(callbackQuery.Id, "Memo updated", cancellationToken: ct);
+        await _tgService.AnswerCallbackQuery(callbackQuery.Id, "Memo updated", showAlert: true, ct);
     }
 
-    private async Task ProcessFileMessage(string accessToken, ITelegramBotClient bot, long chatId, string fileId, Memo memo, CancellationToken ct)
+    private async Task ProcessFileMessage(string accessToken, long chatId, string fileId, Memo memo, CancellationToken ct)
     {
         try
         {
-            var file = await _tgService.GetFile(bot, fileId, ct);
+            var file = await _tgService.GetFile(fileId, ct);
 
             if (string.IsNullOrEmpty(file.ContentType) || MediaTypeNames.Application.Octet.Equals(file.ContentType, StringComparison.OrdinalIgnoreCase))
             {

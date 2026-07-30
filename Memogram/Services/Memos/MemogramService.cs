@@ -59,6 +59,15 @@ public partial class MemogramService
     }
 
 
+    public async Task<List<Memo>> SearchMemoAsync(string searchString, string accessToken, string userName, string userUsername, CancellationToken ct)
+    {
+        var filter = BuildMemoSearchFilter(searchString, userName, userUsername);
+        var memos = await ListMemosAsync(accessToken!, pageSize: 10, filter: filter, ct);
+        return memos;
+    }
+
+
+
     private MemosClient GetAuthenticatedClient(string accessToken)
     {
         return _authClientCache.GetOrAdd(accessToken, token => _memosClient.WithAuthentication(token));
@@ -151,15 +160,13 @@ public partial class MemogramService
         return parts[1];
     }
 
-    public string BuildMemoSearchFilter(string searchString, Clients.Memos.Models.User? user)
+    public string BuildMemoSearchFilter(string searchString, string userName, string userUsername)
     {
         var filter = $"content.contains(\"{searchString}\")";
-        if (user is null)
-            return filter;
 
-        var creator = user.Name;
-        if (string.IsNullOrEmpty(creator) && !string.IsNullOrEmpty(user.Username))
-            creator = "users/" + user.Username;
+        var creator = userName;
+        if (string.IsNullOrEmpty(creator) && !string.IsNullOrEmpty(userUsername))
+            creator = "users/" + userUsername;
         if (string.IsNullOrEmpty(creator))
             return filter;
 
