@@ -95,9 +95,9 @@ public partial class MainService
             await ProcessFileMessage(accessToken!, chatId, photo.FileId, memo, ct);
         }
 
-        var memoUid = _memoService.ExtractMemoUidFromName(memo.Name);
+        var memoUid = MemogramService.ExtractMemoUidFromName(memo.Name);
         string msg = $"Content saved as {memo.Visibility} with [{memo.Name}]({_memoService.BaseUrl}/memos/{memoUid})";
-        await _tgService.SendMessageSaved(message, chatId, memo, msg, ct);
+        await _tgService.SendMessageSaved(message, chatId, memo.Name, msg, ct);
     }
 
     public async Task StartHandler(Message message, string accessToken, CancellationToken ct)
@@ -225,8 +225,8 @@ public partial class MainService
         }
 
         var pinnedMarker = memo.Pinned ? "📌" : "";
-        var memoUid = _memoService.ExtractMemoUidFromName(memo.Name);
-        var inlineKeyboard = _tgService.BuildKeyboard(memo);
+        var memoUid = MemogramService.ExtractMemoUidFromName(memo.Name);
+        var inlineKeyboard = _tgService.BuildKeyboard(memo.Name);
         await _tgService.EditMessageText(chatId, messageId,
             $"Memo updated as {memo.Visibility} with [{memo.Name}]({_memoService.BaseUrl}/memos/{memoUid}) {pinnedMarker}",
             ParseMode.Markdown, inlineKeyboard,

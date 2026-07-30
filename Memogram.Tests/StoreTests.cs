@@ -1,4 +1,4 @@
-﻿using Memogram.Services.UserStore;
+using Memogram.Services.UserStore;
 using Xunit;
 
 namespace Memogram.Tests;
@@ -30,7 +30,31 @@ public class StoreTests
     }
 
     [Fact]
-    public void SaveAndLoadUserAccessTokens()
+    public void ParseLine_EmptyToken_ReturnsEmpty()
+    {
+        var (userId, token) = UserStoreService.ParseLine("42:");
+        Assert.Equal(0, userId);
+        Assert.Equal(string.Empty, token);
+    }
+
+    [Fact]
+    public void ParseLine_EmptyLine_ReturnsEmpty()
+    {
+        var (userId, token) = UserStoreService.ParseLine("");
+        Assert.Equal(0, userId);
+        Assert.Equal(string.Empty, token);
+    }
+
+    [Fact]
+    public void ParseLine_OnlyColon_ReturnsEmpty()
+    {
+        var (userId, token) = UserStoreService.ParseLine(":");
+        Assert.Equal(0, userId);
+        Assert.Equal(string.Empty, token);
+    }
+
+    [Fact]
+    public void SaveAndLoad_PersistsTokens()
     {
         var dataPath = Path.Combine(Path.GetTempPath(), $"memogram-test-{Guid.NewGuid():N}.txt");
         try
@@ -49,6 +73,51 @@ public class StoreTests
 
             Assert.True(reloaded.TryGetUserAccessToken(7, out var token2));
             Assert.Equal("token:two", token2);
+
+            Assert.False(reloaded.TryGetUserAccessToken(99, out _));
+        }
+        finally
+        {
+            if (File.Exists(dataPath))
+                File.Delete(dataPath);
+        }
+    }
+
+    [Fact]
+    public void SaveAndLoad_OverwritesExistingToken()
+    {
+        var dataPath = Path.Combine(Path.GetTempPath(), $"memogram-test-{Guid.NewGuid():N}.txt");
+        try
+        {
+            var store = new UserStoreService(dataPath);
+            store.Init();
+            store.SetUserAccessToken(1, "old-token");
+            store.SetUserAccessToken(1, "new-token");
+
+            var reloaded = new UserStoreService(dataPath);
+            reloaded.Init();
+
+            Assert.True(reloaded.TryGetUserAccessToken(1, out var token));
+            Assert.Equal("new-token", token);
+        }
+        finally
+        {
+            if (File.Exists(dataPath))
+                File.Delete(dataPath);
+        }
+    }
+
+    [Fact]
+    public void Init_CreatesFileIfNotExists()
+    {
+        var dataPath = Path.Combine(Path.GetTempPath(), $"memogram-test-{Guid.NewGuid():N}.txt");
+        try
+        {
+            Assert.False(File.Exists(dataPath));
+            var store = new UserStoreService(dataPath);
+            store.Init();
+            Assert.True(File.Exists(dataPath));
+            Assert.Equal(0, new FileInfo(dataPath).Length);
         }
         finally
         {

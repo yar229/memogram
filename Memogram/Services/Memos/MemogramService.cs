@@ -151,7 +151,7 @@ public partial class MemogramService
         return content;
     }
 
-    public string ExtractMemoUidFromName(string name)
+    public static string ExtractMemoUidFromName(string name)
     {
         var parts = name.Split('/');
         if (parts.Length != 2 || parts[0] != "memos" || string.IsNullOrEmpty(parts[1]))
@@ -160,7 +160,7 @@ public partial class MemogramService
         return parts[1];
     }
 
-    public string BuildMemoSearchFilter(string searchString, string userName, string userUsername)
+    public static string BuildMemoSearchFilter(string searchString, string userName, string userUsername)
     {
         var filter = $"content.contains(\"{searchString}\")";
 
