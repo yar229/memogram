@@ -166,19 +166,21 @@ public class TelegramService
     public async Task<(string FilePath, byte[] Content, string ContentType)> GetFile(string fileId, CancellationToken ct)
     {
         var file = await _bot.GetFile(fileId, cancellationToken: ct);
-        var fileLink = $"https://api.telegram.org/file/bot{_config.BotToken}/{file.FilePath}";
+        if (null == file)
+            throw new FileNotFoundException($"Telegram cannot find file with fileId = {fileId}" );
+        var fileLink = $"https://api.telegram.org/file/bot{_config.BotToken}/{file.FilePath!}";
 
         var response = await _tgHttpClient.GetAsync(fileLink, ct);
         response.EnsureSuccessStatusCode();
 
         var bytes = await response.Content.ReadAsByteArrayAsync(ct);
         var contentType = response.Content.Headers.ContentType?.MediaType ?? MediaTypeNames.Application.Octet;
-        return (file.FilePath, bytes, contentType);
+        return (file.FilePath!, bytes, contentType);
     }
 
     public async Task SendError(long chatId, Exception ex, CancellationToken ct)
     {
-        _logger.LogError(ex, "{Message}", ex.Message);
+        _logger.LogError(ex, ex.Message);
         try
         {
             await _bot.SendMessage(chatId, $"Error: {ex.Message}", cancellationToken: ct);

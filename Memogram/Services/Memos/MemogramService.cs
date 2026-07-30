@@ -217,7 +217,7 @@ public partial class MemogramService
                 ? msg.From?.FirstName
                 : $"{msg.From.FirstName} {msg.From.LastName}";
 
-        return FormatUserstring(originName, msg.From?.Username, msg.From?.IsBot);
+        return FormatUserstring(originName!, msg.From?.Username, msg.From?.IsBot);
     }
 
     private static string FormatContentAsQuote(string content) 
@@ -253,7 +253,7 @@ public partial class MemogramService
         }
         return FormatUserstring(originName, originUsername);
     }
-    private static string FormatUserstring(string name, string username, bool? isBot = false)
+    private static string FormatUserstring(string name, string? username, bool? isBot = false)
     {
         string ava = isBot ?? false ? "🤖" : "👤"; //TODO: to config
         if (!string.IsNullOrEmpty(username))
@@ -287,8 +287,8 @@ public partial class MemogramService
 
     public class FileInfo
     {
-        public string FilePath { get; set; }
-        public byte[] Content { get; set; }
-        public string ContentType { get; set; }
+        public required string FilePath { get; init; }
+        public required byte[] Content { get; init; }
+        public required string ContentType { get; init; }
     }
 }

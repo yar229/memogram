@@ -20,19 +20,17 @@ public partial class MainService
     private readonly IContentInspector _contentInspector;
 
     public MainService(UserStoreService storeService, TelegramService tgService, MemogramService memoService,
+        IContentInspector contentInspector,
         ILogger<MainService> logger)
     {
         _logger = logger;
-
         _tgService = tgService;
         _memoService = memoService;
+
         _storeService = storeService;
         _storeService.Init();
 
-        _contentInspector = new ContentInspectorBuilder()
-        {
-            Definitions = MimeDetective.Definitions.DefaultDefinitions.All()
-        }.Build();
+        _contentInspector = contentInspector;
     }
 
     public async Task Start(CancellationToken ct = default)

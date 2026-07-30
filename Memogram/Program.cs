@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using MimeDetective;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -50,6 +51,10 @@ try
                 return localStorage;
             });
 
+            services.AddSingleton(sp => new ContentInspectorBuilder
+            {
+                Definitions = MimeDetective.Definitions.DefaultDefinitions.All()
+            }.Build());
             services.AddSingleton<UserStoreService>();
             services.AddSingleton<MemosClient>();
             services.AddSingleton<MemogramService>();
