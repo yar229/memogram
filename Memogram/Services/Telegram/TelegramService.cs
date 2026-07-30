@@ -1,5 +1,4 @@
-﻿using Memogram.Clients.Memos.Models;
-using Memogram.Configs;
+﻿using Memogram.Configs;
 using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Mime;
@@ -77,11 +76,11 @@ public class TelegramService
         return _allowedUsernames.Contains(username.Trim().ToLowerInvariant());
     }
 
-    public async Task SendMessageSaved(Message message, long chatId, Memo memo, string msg, CancellationToken ct)
+    public async Task SendMessageSaved(Message message, long chatId, string memoname, string msg, CancellationToken ct)
     {
         if (string.IsNullOrEmpty(_config.OnlyLikeSavedMessageWith))
         {
-            var inlineKeyboard = BuildKeyboard(memo);
+            var inlineKeyboard = BuildKeyboard(memoname);
             await _bot.SendMessage(
                 chatId,
                 msg,
@@ -110,14 +109,14 @@ public class TelegramService
         => _bot.AnswerCallbackQuery(callbackQueryId, message, showAlert: showAlert, cancellationToken: ct);
 
 
-    public InlineKeyboardMarkup BuildKeyboard(Memo memo)
+    public InlineKeyboardMarkup BuildKeyboard(string memoname)
     {
         return new InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton.WithCallbackData("Public", $"public {memo.Name}"),
-                InlineKeyboardButton.WithCallbackData("Private", $"private {memo.Name}"),
-                InlineKeyboardButton.WithCallbackData("Pin", $"pin {memo.Name}"),
+                InlineKeyboardButton.WithCallbackData("Public", $"public {memoname}"),
+                InlineKeyboardButton.WithCallbackData("Private", $"private {memoname}"),
+                InlineKeyboardButton.WithCallbackData("Pin", $"pin {memoname}"),
             ]
         ]);
     }
