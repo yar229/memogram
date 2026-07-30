@@ -1,6 +1,7 @@
 ﻿using Memogram.Clients.Memos;
 using Memogram.Clients.Memos.Models;
 using Memogram.Configs;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Text;
@@ -10,7 +11,7 @@ using Telegram.Bot.Types.Enums;
 
 namespace Memogram;
 
-public partial class MemogramService
+public partial class MemogramService : IDisposable
 {
     private static readonly Dictionary<MessageEntityType, Func<string, string, string, MessageEntity, string>> EntityConverters = new()
     {
@@ -31,13 +32,13 @@ public partial class MemogramService
     private readonly MemogramConfig _config;
     private readonly ILogger<MemogramService> _logger;
 
-    private static readonly TimeSpan MediaGroupTtl = TimeSpan.FromSeconds(30);
-    private readonly ConcurrentDictionary<string, (Memo Memo, DateTime Created)> _mediaGroupCache = new();
+    private readonly MemoryCache _mediaGroupCache = new(new MemoryCacheOptions());
+    private readonly TimeSpan _mediaGroupCacheTtl;
+
     private readonly ConcurrentDictionary<string, MemosClient> _authClientCache = new(StringComparer.Ordinal);
 
     private InstanceProfile? _instanceProfile;
     private readonly SemaphoreSlim _initLock = new(1, 1);
-    private Timer? _cacheCleanupTimer;
 
     public InstanceProfile? InstanceProfile => _instanceProfile;
 
@@ -46,6 +47,13 @@ public partial class MemogramService
         _memosClient = memosClient;
         _config = config;
         _logger = logger;
+
+        _mediaGroupCacheTtl = _config.MediaCacheTtl > TimeSpan.Zero ? _config.MediaCacheTtl : TimeSpan.FromSeconds(300);
+    }
+
+    public void Dispose()
+    {
+        _mediaGroupCache.Dispose();
     }
 
     public async Task InitializeAsync(CancellationToken ct)
@@ -56,29 +64,11 @@ public partial class MemogramService
         {
             if (_instanceProfile is not null) return;
             _instanceProfile = await GetInstanceProfileAsync(ct);
-            _cacheCleanupTimer = new Timer(_ => EvictExpiredCache(), null, _config.MediaCacheTtl, _config.MediaCacheTtl);
         }
         finally
         {
             _initLock.Release();
         }
-    }
-
-    private void EvictExpiredCache()
-    {
-        int totalCount = _mediaGroupCache.Count;
-        int deletedCount = 0;
-        var cutoff = DateTime.UtcNow - MediaGroupTtl;
-        foreach (var kvp in _mediaGroupCache)
-        {
-            if (kvp.Value.Created < cutoff)
-            {
-                if (_mediaGroupCache.TryRemove(kvp.Key, out _))
-                    deletedCount++;
-            }
-        }
-        if (deletedCount > 0)
-            _logger.LogDebug($"MediaCache cleanup: deleted {deletedCount} of {totalCount}");
     }
 
 
@@ -130,20 +120,18 @@ public partial class MemogramService
 
     public async Task<Memo> HandleMemoCreation(string accessToken, string? mediaGroupId, string content, CancellationToken ct)
     {
-        var memoClient = GetAuthenticatedClient(accessToken!);
-
         if (!string.IsNullOrEmpty(mediaGroupId))
         {
-            if (_mediaGroupCache.TryGetValue(mediaGroupId, out var cached))
-            {
-                return cached.Memo;
-            }
+            if (_mediaGroupCache.TryGetValue(mediaGroupId, out var cached) && cached is Memo cachedMemo)
+                return cachedMemo;
 
-            var memo = await memoClient.CreateMemoAsync(content, tags: _config.TagsToAdd, ct: ct);
-            _mediaGroupCache[mediaGroupId] = (memo, DateTime.UtcNow);
-            return memo;
+            var memoClientA = GetAuthenticatedClient(accessToken!);
+            var createdMemo = await memoClientA.CreateMemoAsync(content, tags: _config.TagsToAdd, ct: ct);
+            _mediaGroupCache.Set(mediaGroupId, createdMemo, _mediaGroupCacheTtl);
+            return createdMemo;
         }
 
+        var memoClient = GetAuthenticatedClient(accessToken!);
         return await memoClient.CreateMemoAsync(content, tags: _config.TagsToAdd, ct: ct);
     }
 

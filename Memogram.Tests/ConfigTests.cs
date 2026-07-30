@@ -8,21 +8,21 @@ public class ConfigTests
     [Fact]
     public void MemogramConfig_Validate_ThrowsOnEmptyServerAddr()
     {
-        var config = new MemogramConfig { ServerAddr = "" };
+        var config = new MemogramConfig { ServerAddr = "", MediaCacheTtl = TimeSpan.FromSeconds(10) };
         Assert.Throws<InvalidOperationException>(config.Validate);
     }
 
     [Fact]
     public void MemogramConfig_Validate_ThrowsOnWhitespaceServerAddr()
     {
-        var config = new MemogramConfig { ServerAddr = "   " };
+        var config = new MemogramConfig { ServerAddr = "   ", MediaCacheTtl = TimeSpan.FromSeconds(10) };
         Assert.Throws<InvalidOperationException>(config.Validate);
     }
 
     [Fact]
     public void MemogramConfig_Validate_PassesWithValidServerAddr()
     {
-        var config = new MemogramConfig { ServerAddr = "http://localhost:5230" };
+        var config = new MemogramConfig { ServerAddr = "http://localhost:5230", MediaCacheTtl = TimeSpan.FromSeconds(10) };
         config.Validate();
     }
 
