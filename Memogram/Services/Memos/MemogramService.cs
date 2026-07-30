@@ -214,13 +214,13 @@ public partial class MemogramService : IDisposable
         return sb.ToString();
     }
 
-    private static string PrependForwardedFrom(MessageOrigin origin, string content) 
+    private string PrependForwardedFrom(MessageOrigin origin, string content) 
         => $"\n> {FormatUserstring(origin)}: {FormatContentAsQuote(content)}";
 
     private string PrependReplyToMessage(Message msg, string content) 
         => $"\n> {FormatUserstring(msg)}: {PrepareMessageContent(msg)} \n\n {content}";
 
-    private static string FormatUserstring(Message msg)
+    private string FormatUserstring(Message msg)
     {
         var originName = string.IsNullOrEmpty(msg.From?.LastName)
                 ? msg.From?.FirstName
@@ -232,11 +232,11 @@ public partial class MemogramService : IDisposable
     private static string FormatContentAsQuote(string content) 
         => content.Replace("\n", "\n> ");
 
-    private static string FormatUserstring(MessageOrigin msg)
+    private string FormatUserstring(MessageOrigin msg)
     {
         string originName = string.Empty;
         string? originUsername = null;
-        bool isBot;
+        bool isBot = false;
 
         switch (msg)
         {
@@ -250,6 +250,7 @@ public partial class MemogramService : IDisposable
                 break;
             case MessageOriginHiddenUser hiddenOrigin:
                 originName = string.IsNullOrEmpty(hiddenOrigin.SenderUserName) ? "Hidden User" : hiddenOrigin.SenderUserName;
+                isBot = false;
                 break;
             case MessageOriginChat chatOrigin:
                 originName = chatOrigin.SenderChat.Title ?? string.Empty;
@@ -260,11 +261,13 @@ public partial class MemogramService : IDisposable
                 originUsername = channelOrigin.Chat.Username;
                 break;
         }
-        return FormatUserstring(originName, originUsername);
+        return FormatUserstring(originName, originUsername, isBot);
     }
-    private static string FormatUserstring(string name, string? username, bool? isBot = false)
+    private string FormatUserstring(string name, string? username, bool? isBot = false)
     {
-        string ava = isBot ?? false ? "🤖" : "👤"; //TODO: to config
+        string? ava = isBot ?? false 
+            ? _config.Icons?.Bot 
+            : _config.Icons?.Human;
         if (!string.IsNullOrEmpty(username))
             return $"{ava}[{name}](https://t.me/{username})";
         return $"{ava}{name}";
