@@ -95,7 +95,7 @@ public class MessageHandler
 
             await _memoService.ProcessFileMessage(accessToken,
                 new MemogramService.FileInfo { FilePath = filepath, Content = contentStream, ContentType = contentType },
-                chatId, fileId, memo, ct);
+                memo, ct);
         }
         catch (Exception ex)
         {

@@ -47,7 +47,7 @@ public class TelegramService
         _bot.StartReceiving(
             HandleUpdateAsync,
             HandleErrorAsync,
-            new ReceiverOptions { AllowedUpdates = [UpdateType.Message, UpdateType.EditedMessage, UpdateType.CallbackQuery] },
+            new ReceiverOptions { AllowedUpdates = [UpdateType.Message, /* UpdateType.EditedMessage, */ UpdateType.CallbackQuery] },
             cancellationToken: ct);
 
         _logger.LogInformation("Bot is listening...");
@@ -139,7 +139,7 @@ public class TelegramService
             return false;
 
         string fullCommand = message.Text.Substring(entity.Offset, entity.Length);
-        string cleanCommand = fullCommand.Split('@')[0].ToLower();
+        string cleanCommand = fullCommand.Split('@')[0].ToLowerInvariant();
         var handler = _botCommands.FirstOrDefault(h => h.Command == cleanCommand);
         if (null == handler)
             return false;

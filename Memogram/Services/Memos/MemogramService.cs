@@ -10,7 +10,7 @@ using Telegram.Bot.Types.Enums;
 
 namespace Memogram.Services.Memos;
 
-public partial class MemogramService : IDisposable
+public partial class MemogramService
 {
     private static readonly Dictionary<MessageEntityType, Func<string, string, string, MessageEntity, string>> EntityConverters = new()
     {
@@ -31,26 +31,21 @@ public partial class MemogramService : IDisposable
     private readonly MemogramConfig _config;
     private readonly ILogger<MemogramService> _logger;
 
-    private readonly MemoryCache _mediaGroupCache = new(new MemoryCacheOptions());
+    private readonly IMemoryCache _mediaGroupCache;
     private readonly TimeSpan _mediaGroupCacheTtl;
-
     private InstanceProfile? _instanceProfile;
     private readonly SemaphoreSlim _initLock = new(1, 1);
 
     public InstanceProfile? InstanceProfile => _instanceProfile;
 
-    public MemogramService(MemosClient memosClient,  MemogramConfig config, ILogger<MemogramService> logger)
+    public MemogramService(MemosClient memosClient,  MemogramConfig config, IMemoryCache mediaGroupCache, ILogger<MemogramService> logger)
     {
         _memosClient = memosClient;
         _config = config;
+        _mediaGroupCache = mediaGroupCache;
         _logger = logger;
 
         _mediaGroupCacheTtl = _config.MediaCacheTtl > TimeSpan.Zero ? _config.MediaCacheTtl : TimeSpan.FromSeconds(300);
-    }
-
-    public void Dispose()
-    {
-        _mediaGroupCache.Dispose();
     }
 
     public async Task InitializeAsync(CancellationToken ct)
@@ -125,7 +120,7 @@ public partial class MemogramService : IDisposable
         return await _memosClient.CreateMemoAsync(accessToken, content, tags: _config.TagsToAdd, ct: ct);
     }
 
-    public async Task ProcessFileMessage(string accessToken, FileInfo file, long chatId, string fileId, Memo memo, CancellationToken ct)
+    public async Task ProcessFileMessage(string accessToken, FileInfo file, Memo memo, CancellationToken ct)
     {
         await _memosClient.CreateAttachmentAsync(
             accessToken,

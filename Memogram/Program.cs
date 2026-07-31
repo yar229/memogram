@@ -32,6 +32,7 @@ try
         .ConfigureServices((context, services) =>
         {
             services.ConfigureAndValidate<MemogramConfig>(context);
+            services.AddMemoryCache();
             services.AddSingleton<MemosClient>();
             services.AddSingleton<MemogramService>();
 
