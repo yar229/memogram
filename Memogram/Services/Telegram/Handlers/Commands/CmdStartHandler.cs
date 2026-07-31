@@ -1,12 +1,13 @@
-﻿using Memogram.Services.Memos;
-using Memogram.Services.Telegram;
+﻿using Memogram.Clients.Telegram;
+using Memogram.Services.Memos;
 using Memogram.Services.UserStore;
 using Microsoft.Extensions.Logging;
+using Telegram.Bot;
 using Telegram.Bot.Types;
 
 namespace Memogram.Services.Telegram.Handlers.Commands;
 
-public class CmdStartHandler(MemogramService _memoService, TelegramService _tgService, UserStoreService _storeService,
+public class CmdStartHandler(MemogramService _memoService, IMyTelegramBotClient _tgBotClient, UserStoreService _storeService,
     ILogger<CmdStartHandler> _logger)
     : ICmdHandler
 {
@@ -20,7 +21,7 @@ public class CmdStartHandler(MemogramService _memoService, TelegramService _tgSe
 
         if (string.IsNullOrEmpty(accessToken))
         {
-            await _tgService.SendMessage(chatId, Usage, ct);
+            await _tgBotClient.SendMessage(chatId, Usage, cancellationToken: ct);
             return;
         }
 
@@ -28,12 +29,12 @@ public class CmdStartHandler(MemogramService _memoService, TelegramService _tgSe
         {
             var user = await _memoService.GetCurrentUserAsync(accessToken, ct);
             await _storeService.SetUserAccessTokenAsync(message.From!.Id, accessToken);
-            await _tgService.SendMessage(chatId, $"Hello {user.DisplayName}!", ct);
+            await _tgBotClient.SendMessage(chatId, $"Hello {user.DisplayName}!", cancellationToken: ct);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Invalid access token");
-            await _tgService.SendMessage(chatId, "Invalid access token", ct);
+            await _tgBotClient.SendMessage(chatId, "Invalid access token", cancellationToken: ct);
         }
     }
 }

@@ -8,7 +8,6 @@ using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using Telegram.Bot.Types.ReplyMarkups;
 
 namespace Memogram.Services.Telegram;
 
@@ -19,27 +18,30 @@ public class TelegramService
     private readonly IMyTelegramBotClient _bot;
     private readonly HashSet<string> _allowedUsernames;
     private ICmdHandler[] _botCommands = null!;
-    private MessageHandler _handleMessage = null!;
-    private CallbackQueryHandler _handleCallback = null!;
+    private MessageHandler _messageHandler = null!;
+    private CallbackQueryHandler _callbackQueryHandler = null!;
 
-    public TelegramService(TelegramConfig config, IMyTelegramBotClient bot, ILogger<TelegramService> logger)
+    public TelegramService(TelegramConfig config, IMyTelegramBotClient bot, 
+        IEnumerable<ICmdHandler> cmdHandlers,
+        MessageHandler messageHandler,
+        CallbackQueryHandler callbackQueryHandler,
+        ILogger<TelegramService> logger)
     {
         _config = config;
         _bot = bot;
+        _botCommands = cmdHandlers.ToArray();
+        _messageHandler = messageHandler;
+        _callbackQueryHandler = callbackQueryHandler;
+        
         _logger = logger;
 
         _allowedUsernames = ParseAllowedUsernames(config.AllowedUsernames);
     }
 
-    public async Task Start(IEnumerable<ICmdHandler> cmdHandlers,
-        MessageHandler handleMessage,
-        CallbackQueryHandler handleCallback,
+    public async Task Start(
         CancellationToken ct = default)
     {
-        _handleMessage = handleMessage;
-        _handleCallback = handleCallback;
-
-        _botCommands = cmdHandlers.ToArray();
+        
         await _bot.SetMyCommands(_botCommands.Select(bc => new BotCommand(bc.Command, bc.Usage)));
 
         _bot.StartReceiving(
@@ -51,9 +53,6 @@ public class TelegramService
         _logger.LogInformation("Bot is listening...");
     }
 
-    public Task SendMessage(long chatId, string message, CancellationToken ct) 
-        => _bot.SendMessage(chatId, message, cancellationToken: ct);
-
     public bool IsUserAllowed(string? username)
     {
         if (_allowedUsernames.Count == 0)
@@ -63,30 +62,13 @@ public class TelegramService
         return _allowedUsernames.Contains(username.Trim().ToLowerInvariant());
     }
 
-
-    public async Task SendMemoMessage(string baseUrl, string memoUrl, string content, long chatId, CancellationToken ct)
-    {
-        int trimCount = _config.SearchReplyMessagesTrim;
-        string trimmedContent = content.Length > trimCount
-            ? $"{content[..trimCount]}..."
-            : content;
-        string tgMessage = $"[🔗]({baseUrl}/{memoUrl}) {trimmedContent.TrimEnd()}";
-
-        await _bot.SendMessage(chatId, tgMessage,
-            parseMode: ParseMode.Markdown,
-            disableNotification: true,
-            linkPreviewOptions: LinkPreviewOptions.Disabled,
-            cancellationToken: ct);
-    }
-
-
     private async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken ct)
     {
         try
         {
             if (update.CallbackQuery is { } callbackQuery)
             {
-                await _handleCallback.HandleAsync(bot, callbackQuery, ct);
+                await _callbackQueryHandler.HandleAsync(callbackQuery, ct);
                 return;
             }
 
@@ -103,22 +85,6 @@ public class TelegramService
             _logger.LogError(ex, "Error handling update");
         }
     }
-
-
-
-    public async Task SendError(long chatId, Exception ex, CancellationToken ct)
-    {
-        _logger.LogError(ex, ex.Message);
-        try
-        {
-            await _bot.SendMessage(chatId, $"Error: {ex.Message}", cancellationToken: ct);
-        }
-        catch
-        {
-            _logger.LogError(ex, "Failed to send error to telegram: {Message}", ex.Message);
-        }
-    }
-
 
     private async Task HandleMessageAsync(Message message, CancellationToken ct)
     {
@@ -139,7 +105,7 @@ public class TelegramService
         if (processed)
             return;
 
-        await _handleMessage.HandleAsync(_bot, message, ct);
+        await _messageHandler.HandleAsync(message, ct);
     }
 
     private Task HandleErrorAsync(ITelegramBotClient _, Exception exception, CancellationToken ct)
@@ -182,6 +148,20 @@ public class TelegramService
         await handler.Handle(message, arguments, ct);
         return true;
     }
+
+    private async Task SendError(long chatId, Exception ex, CancellationToken ct)
+    {
+        _logger.LogError(ex, ex.Message);
+        try
+        {
+            await _bot.SendMessage(chatId, $"Error: {ex.Message}", cancellationToken: ct);
+        }
+        catch
+        {
+            _logger.LogError(ex, "Failed to send error to telegram: {Message}", ex.Message);
+        }
+    }
+
 
     private static HashSet<string> ParseAllowedUsernames(string? raw)
     {

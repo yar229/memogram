@@ -1,7 +1,6 @@
 ﻿using Memogram.Services.Memos;
 using Memogram.Services.Telegram;
 using Memogram.Services.Telegram.Handlers;
-using Memogram.Services.Telegram.Handlers.Commands;
 using Memogram.Services.UserStore;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
@@ -41,13 +40,7 @@ public class MainService
 
         _logger.LogInformation("Instance profile: {Profile}", JsonSerializer.Serialize(_memoService.InstanceProfile));
 
-        await _tgService
-            .Start([ 
-                    new CmdStartHandler(_memoService, _tgService, _storeService, _loggerFactory.CreateLogger<CmdStartHandler>()), //TODO: baaad
-                    new CmdSearchHandler(_memoService, _tgService, _storeService, _loggerFactory.CreateLogger<CmdSearchHandler>())
-                ],
-                _messageHandler, _callbackQueryHandler,
-                ct);
+        await _tgService.Start(ct);
 
         await Task.Delay(Timeout.Infinite, ct);
     }

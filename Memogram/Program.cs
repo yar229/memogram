@@ -6,6 +6,7 @@ using Memogram.Services.Memos;
 using Memogram.Services.MimeTypeDetectors;
 using Memogram.Services.Telegram;
 using Memogram.Services.Telegram.Handlers;
+using Memogram.Services.Telegram.Handlers.Commands;
 using Memogram.Services.UserStore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,16 +35,19 @@ try
             services.AddSingleton<MemosClient>();
             services.AddSingleton<MemogramService>();
 
+
             services.ConfigureAndValidate<TelegramConfig>(context);
             services.AddTelegramClient("telegram_bot_client");
+            services.AddSingleton<ICmdHandler, CmdStartHandler>();
+            services.AddSingleton<ICmdHandler, CmdSearchHandler>();
+            services.AddSingleton<MessageHandler>();
+            services.AddSingleton<CallbackQueryHandler>();
             services.AddSingleton<TelegramService>();
 
             services.ConfigureAndValidate<LocalStorageConfig>(context);
             services.AddSingleton<UserStoreService>();
 
             services.AddSingleton<IMimeTypeDetector, MimeDetectiveMimeTypeDetector>();
-            services.AddSingleton<MessageHandler>();
-            services.AddSingleton<CallbackQueryHandler>();
             services.AddSingleton<MainService>();
         })
         .Build();
