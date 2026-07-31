@@ -1,5 +1,6 @@
 ﻿using Memogram.Configs;
 using Microsoft.Extensions.Logging;
+using System.Net.Mime;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
@@ -13,13 +14,13 @@ public class TelegramService
 {
     private readonly TelegramConfig _config;
     private readonly ILogger<TelegramService> _logger;
-    private readonly ITelegramBotClient _bot;
+    private readonly IMyTelegramBotClient _bot;
     private readonly HashSet<string> _allowedUsernames;
     private BotCommandHandler[] _botCommands = null!;
     private Func<Message, CancellationToken, Task> _handleMessage = null!;
     private Func<CallbackQuery, CancellationToken, Task> _handleCallback = null!;
 
-    public TelegramService(TelegramConfig config, ITelegramBotClient bot, ILogger<TelegramService> logger)
+    public TelegramService(TelegramConfig config, IMyTelegramBotClient bot, ILogger<TelegramService> logger)
     {
         _config = config;
         _bot = bot;
@@ -160,14 +161,26 @@ public class TelegramService
     /// <param name="ct"></param>
     /// <returns>filepath</returns>
     /// <exception cref="FileNotFoundException"></exception>
-    public async Task<string> GetFileAsync(string fileId, Stream ms, CancellationToken ct)
+    public async Task<(string filePath, Stream content)> GetFileAsync(string fileId, CancellationToken ct)
     {
+        //var file = await _bot.GetFile(fileId, cancellationToken: ct);
+        //if (null == file)
+        //    throw new FileNotFoundException($"Telegram cannot find file with fileId = {fileId}" );
+
+        //await _bot.DownloadFile(file, ms, ct);
+        //return file.FilePath!;
+
         var file = await _bot.GetFile(fileId, cancellationToken: ct);
         if (null == file)
-            throw new FileNotFoundException($"Telegram cannot find file with fileId = {fileId}" );
+            throw new FileNotFoundException($"Telegram cannot find file with fileId = {fileId}");
+        var fileLink = $"https://api.telegram.org/file/bot{_config.BotToken}/{file.FilePath!}";
 
-        await _bot.DownloadFile(file, ms, ct);
-        return file.FilePath!;
+        var response = await _bot.HttpClient.GetAsync(fileLink, ct);
+        response.EnsureSuccessStatusCode();
+
+        //var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+        //var contentType = response.Content.Headers.ContentType?.MediaType ?? MediaTypeNames.Application.Octet;
+        return (file.FilePath!, await response.Content.ReadAsStreamAsync());
     }
 
     public async Task SendError(long chatId, Exception ex, CancellationToken ct)

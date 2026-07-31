@@ -247,26 +247,26 @@ public class MainService
     {
         try
         {
-            using var ms = new MemoryStream();
-            var filepath = await _tgService.GetFileAsync(fileId, ms, ct);
             
-            ms.Position = 0;
-            var bestMatch = _contentInspector.Inspect(ms).ByMimeType().FirstOrDefault();
-            var contentType = null != bestMatch && !string.IsNullOrEmpty(bestMatch.MimeType)
-                ? bestMatch.MimeType
-                : MediaTypeNames.Application.Octet;
+            var (filepath, contentStream) = await _tgService.GetFileAsync(fileId, ct);
 
-
-
-            //var bytes = ms.ToArray();
-
-            //var bestMatch = _contentInspector.Inspect(bytes).ByMimeType().FirstOrDefault();
+            //ms.Position = 0;
+            //var bestMatch = _contentInspector.Inspect(ms).ByMimeType().FirstOrDefault();
             //var contentType = null != bestMatch && !string.IsNullOrEmpty(bestMatch.MimeType)
             //    ? bestMatch.MimeType
             //    : MediaTypeNames.Application.Octet;
 
+            //var contentType = MediaTypeNames.Application.Octet;
+
+            //var bytes = ms.ToArray();
+
+            var bestMatch = _contentInspector.Inspect(contentStream).ByMimeType().FirstOrDefault();
+            var contentType = null != bestMatch && !string.IsNullOrEmpty(bestMatch.MimeType)
+                ? bestMatch.MimeType
+                : MediaTypeNames.Application.Octet;
+
             await _memoService.ProcessFileMessage(accessToken, 
-                new MemogramService.FileInfo { FilePath = filepath, Content = ms, ContentType = contentType },
+                new MemogramService.FileInfo { FilePath = filepath, Content = contentStream, ContentType = contentType },
                 chatId, fileId, memo, ct);
         }
         catch (Exception ex)
