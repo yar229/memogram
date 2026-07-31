@@ -1,4 +1,5 @@
-﻿using Memogram.Configs;
+﻿using Memogram.Clients.Telegram;
+using Memogram.Configs;
 using Microsoft.Extensions.Logging;
 using System.Net.Mime;
 using Telegram.Bot;
@@ -151,16 +152,6 @@ public class TelegramService
         }
     }
 
-
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="fileId"></param>
-    /// <param name="ms"></param>
-    /// <param name="ct"></param>
-    /// <returns>filepath</returns>
-    /// <exception cref="FileNotFoundException"></exception>
     public async Task<(string filePath, Stream content)> GetFileAsync(string fileId, CancellationToken ct)
     {
         var file = await _bot.GetFile(fileId, cancellationToken: ct);
@@ -168,28 +159,8 @@ public class TelegramService
             throw new FileNotFoundException($"Telegram cannot find file with fileId = {fileId}");
         var fileLink = $"https://api.telegram.org/file/bot{_config.BotToken}/{file.FilePath!}";
 
-        //var response = await _bot.HttpClient.GetAsync(fileLink, ct);
-        var response = await _bot.HttpClient.GetAsync(fileLink, HttpCompletionOption.ResponseHeadersRead, ct);
+        var response = await _bot.HttpClient!.GetAsync(fileLink, HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
-
-        //var fileName = Path.GetFileName(file.FilePath);
-        //var tempPath = Path.Combine(Path.GetTempPath(),
-        //    $"{Guid.NewGuid():N}_{(string.IsNullOrEmpty(fileName) ? "file" : fileName)}");
-
-        //var fileStream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite,
-        //    FileShare.Read, 81920, FileOptions.SequentialScan | FileOptions.DeleteOnClose);
-        //try
-        //{
-        //    await response.Content.CopyToAsync(fileStream, ct);
-        //}
-        //catch
-        //{
-        //    await fileStream.DisposeAsync();
-        //    throw;
-        //}
-
-        //fileStream.Position = 0;
-        //return (file.FilePath!, fileStream);
 
         var stream = await response.Content.ReadAsStreamAsync(ct);
         return (file.FilePath!, stream);

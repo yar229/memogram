@@ -3,13 +3,13 @@ using Memogram.Clients.Memos;
 using Memogram.Configs;
 using Memogram.Services;
 using Memogram.Services.Memos;
+using Memogram.Services.MimeTypeDetectors;
 using Memogram.Services.Telegram;
 using Memogram.Services.UserStore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using MimeDetective;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -40,7 +40,7 @@ try
             services.ConfigureAndValidate<LocalStorageConfig>(context);
             services.AddSingleton<UserStoreService>();
 
-            services.AddSingleton(sp => new ContentInspectorBuilder { Definitions = MimeDetective.Definitions.DefaultDefinitions.All() }.Build());
+            services.AddSingleton<IMimeTypeDetector, MimeDetectiveMimeTypeDetector>();
             services.AddSingleton<MainService>();
         })
         .Build();

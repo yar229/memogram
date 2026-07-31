@@ -1,13 +1,14 @@
 ﻿using Memogram.Clients.Memos.Models;
 using Memogram.Services.Memos;
+using Memogram.Services.MimeTypeDetectors;
 using Memogram.Services.Telegram;
 using Memogram.Services.UserStore;
 using Microsoft.Extensions.Logging;
-using MimeDetective;
 using System.Net.Mime;
 using System.Text.Json;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace Memogram.Services;
 
@@ -16,12 +17,13 @@ public class MainService
     private readonly UserStoreService _storeService;
     private readonly TelegramService _tgService;
     private readonly MemogramService _memoService;
+    private readonly IMimeTypeDetector _mimeTypeDetector;
 
     private readonly ILogger<MainService> _logger;
-    private readonly IContentInspector _contentInspector;
+    
 
     public MainService(UserStoreService storeService, TelegramService tgService, MemogramService memoService,
-        IContentInspector contentInspector,
+        IMimeTypeDetector mimeTypeDetector,
         ILogger<MainService> logger)
     {
         _logger = logger;
@@ -30,7 +32,7 @@ public class MainService
 
         _storeService = storeService;
 
-        _contentInspector = contentInspector;
+        _mimeTypeDetector = mimeTypeDetector;
     }
 
     public async Task Start(CancellationToken ct = default)
@@ -248,12 +250,7 @@ public class MainService
         var (filepath, contentStream) = await _tgService.GetFileAsync(fileId, ct);
         try
         {
-            //var bestMatch = _contentInspector.Inspect(contentStream).ByMimeType().FirstOrDefault();
-            //var contentType = null != bestMatch && !string.IsNullOrEmpty(bestMatch.MimeType)
-            //    ? bestMatch.MimeType
-            //    : MediaTypeNames.Application.Octet;
-
-            var contentType = MediaTypeNames.Application.Octet;
+            var contentType = _mimeTypeDetector.Detect(filepath, contentStream);
 
             await _memoService.ProcessFileMessage(accessToken, 
                 new MemogramService.FileInfo { FilePath = filepath, Content = contentStream, ContentType = contentType },

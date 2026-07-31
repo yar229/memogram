@@ -1,4 +1,5 @@
-﻿using Memogram.Configs;
+﻿using Memogram.Clients.Telegram;
+using Memogram.Configs;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -48,28 +49,5 @@ internal static class ServicesExtensions
 
                 return new MyTelegramBotClient(options, httpClient);
             });
-    }
-}
-
-
-public interface IMyTelegramBotClient : ITelegramBotClient
-{
-    HttpClient? HttpClient { get;}
-}
-public class MyTelegramBotClient : TelegramBotClient, IMyTelegramBotClient
-{
-    public HttpClient? HttpClient => _httpClient;
-    private readonly HttpClient? _httpClient;
-
-    public MyTelegramBotClient(TelegramBotClientOptions options, HttpClient? httpClient = null, CancellationToken cancellationToken = default) 
-        : base(options, httpClient, cancellationToken)
-    {
-        _httpClient = httpClient;
-    }
-
-    public MyTelegramBotClient(string token, HttpClient? httpClient = null, CancellationToken cancellationToken = default) 
-        : base(token, httpClient, cancellationToken)
-    {
-        _httpClient = httpClient;
     }
 }

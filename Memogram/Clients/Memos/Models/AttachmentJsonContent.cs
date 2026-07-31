@@ -1,22 +1,16 @@
-﻿using Memogram.Clients.Memos.Models;
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace Memogram.Clients.Memos;
+namespace Memogram.Clients.Memos.Models;
 
-/// <summary>
-/// Serializes a <see cref="CreateAttachmentRequest"/> to JSON, streaming the file content
-/// as base64 directly to the HTTP request stream without buffering it in memory.
-/// </summary>
 public sealed class AttachmentJsonContent : HttpContent
 {
     private readonly CreateAttachmentRequest _request;
     private readonly byte[] _prefix;
     private readonly byte[] _suffix;
-
     public AttachmentJsonContent(CreateAttachmentRequest request)
     {
         _request = request ?? throw new ArgumentNullException(nameof(request));
@@ -43,15 +37,9 @@ public sealed class AttachmentJsonContent : HttpContent
         using (var transform = new ToBase64Transform())
         using (var cryptoStream = new CryptoStream(stream, transform, CryptoStreamMode.Write, leaveOpen: true))
         {
-            // Standard 81,920-byte buffer for high-performance streaming
-            await source.CopyToAsync(cryptoStream, 81920).ConfigureAwait(false);
-
-            // Ensures the final block and padding characters ('=') are written cleanly
+            await source.CopyToAsync(cryptoStream, 81920).ConfigureAwait(false); // Standard 81,920-byte buffer for high-performance streaming
             cryptoStream.FlushFinalBlock();
         }
-
-        //await using (var base64Stream = new Base64Stream(source, leaveOpen: true))
-        //    await base64Stream.CopyToAsync(stream, cancellationToken);
 
         await stream.WriteAsync(_suffix, cancellationToken);
     }
