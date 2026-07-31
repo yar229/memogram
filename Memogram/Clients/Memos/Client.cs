@@ -102,7 +102,7 @@ public class MemosClient
             Content = doAddTags ? sb!.ToString() : content,
             Visibility = visibility,
         };
-        var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Post, Url("/api/v1/memos"), accessToken, body, ct2), ct);
+        var response = await SendWithAuthAsync(HttpMethod.Post, Url("/api/v1/memos"), accessToken, body, ct);
         await ThrowIfNotSuccessAsync(response, ct);
         var memo = await response.Content.ReadFromJsonAsync<Memo>(cancellationToken: ct);
         return memo ?? throw new InvalidOperationException("No memo in response");
@@ -152,7 +152,7 @@ public class MemosClient
             Type = contentType,
             Content = content
         };
-        var response = await RetryAsync(ct2 => SendWithAuthContentAsync(HttpMethod.Post, Url("/api/v1/attachments"), accessToken, new AttachmentJsonContent(body), ct2), ct);
+        var response = await SendWithAuthContentAsync(HttpMethod.Post, Url("/api/v1/attachments"), accessToken, new AttachmentJsonContent(body), ct);
         await ThrowIfNotSuccessAsync(response, ct);
         var res = await response.Content.ReadFromJsonAsync<CreateAttachmentResponse>(cancellationToken: ct);
         return res ?? throw new InvalidOperationException("No attachment in response");

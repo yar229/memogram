@@ -76,4 +76,71 @@ public class ClientTests
         Assert.Equal("file.txt", doc.RootElement.GetProperty("filename").GetString());
         Assert.Equal(Convert.ToBase64String(bytes), doc.RootElement.GetProperty("content").GetString());
     }
+
+    [Fact]
+    public async Task CreateAttachmentAsync_OnServerError_DoesNotRetry()
+    {
+        var bytes = Encoding.UTF8.GetBytes("hello world");
+        using var content = new MemoryStream(bytes);
+
+        var attempts = 0;
+        var handler = new RecordingHandler(_ =>
+        {
+            attempts++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        });
+
+        using var httpClient = new HttpClient(handler);
+        var client = new MemosClient("http://localhost:1234", httpClient, NullLogger<MemosClient>.Instance);
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.CreateAttachmentAsync("token", "file.txt", "text/plain", content, memoName: "memos/1"));
+
+        Assert.Equal(1, attempts);
+    }
+
+    [Fact]
+    public async Task CreateMemoAsync_OnServerError_DoesNotRetry()
+    {
+        var attempts = 0;
+        var handler = new RecordingHandler(_ =>
+        {
+            attempts++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        });
+
+        using var httpClient = new HttpClient(handler);
+        var client = new MemosClient("http://localhost:1234", httpClient, NullLogger<MemosClient>.Instance);
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.CreateMemoAsync("token", "hello"));
+
+        Assert.Equal(1, attempts);
+    }
+
+    [Fact]
+    public async Task GetMemoAsync_OnTransientError_Retries()
+    {
+        var attempts = 0;
+        var handler = new RecordingHandler(_ =>
+        {
+            attempts++;
+            if (attempts < 3)
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"name\":\"memos/1\",\"content\":\"hello\",\"visibility\":\"PRIVATE\",\"pinned\":false}",
+                    Encoding.UTF8,
+                    "application/json"),
+            });
+        });
+
+        using var httpClient = new HttpClient(handler);
+        var client = new MemosClient("http://localhost:1234", httpClient, NullLogger<MemosClient>.Instance);
+
+        await client.GetMemoAsync("token", "memos/1");
+
+        Assert.Equal(3, attempts);
+    }
 }
