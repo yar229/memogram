@@ -1,22 +1,25 @@
 ﻿using Memogram.Services.Telegram;
 using Microsoft.Extensions.Logging;
 using MimeDetective;
+using MimeDetective.Storage;
 using SerilogTimings;
+using System.Collections.Immutable;
 using System.Net.Mime;
 
 namespace Memogram.Services.MimeTypeDetectors;
 
 public class MimeDetectiveMimeTypeDetector : IMimeTypeDetector
 {
-    private readonly ILogger<TelegramService> _logger;
+    private readonly ILogger<MimeDetectiveMimeTypeDetector> _logger;
     private IContentInspector _contentInspector;
-
-    public MimeDetectiveMimeTypeDetector(ILogger<TelegramService> logger)
+    private readonly ImmutableArray<MimeDetective.Storage.Definition> _definitions;
+    public MimeDetectiveMimeTypeDetector(ILogger<MimeDetectiveMimeTypeDetector> logger)
     {
         _logger = logger;
         using (var op = Operation.Time("Loading MimeDetective definitions"))
         {
-            _contentInspector = new ContentInspectorBuilder { Definitions = MimeDetective.Definitions.DefaultDefinitions.All() }.Build();
+            _definitions = MimeDetective.Definitions.DefaultDefinitions.All();
+            _contentInspector = new ContentInspectorBuilder { Definitions = _definitions }.Build();
         }
     }
     public string Detect(string? filepath, Stream? stream)
@@ -37,7 +40,7 @@ public class MimeDetectiveMimeTypeDetector : IMimeTypeDetector
 
         var cleanExt = extension.TrimStart('.').ToLower();
 
-        var matchedType = MimeDetective.Definitions.DefaultDefinitions.All()
+        var matchedType = _definitions
             .FirstOrDefault(d => d.File.Extensions.Contains(cleanExt));
 
         return matchedType?.File.MimeType ?? MediaTypeNames.Application.Octet;

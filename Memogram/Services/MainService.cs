@@ -86,8 +86,9 @@ public class MainService
         {
             memo = await _memoService.HandleMemoCreation(accessToken!, message.MediaGroupId, content, ct);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to create memo");
             await _tgService.SendMessage(chatId, "Failed to create memo", ct);
             return;
         }
@@ -126,8 +127,9 @@ public class MainService
             await _storeService.SetUserAccessTokenAsync(message.From!.Id, accessToken);
             await _tgService.SendMessage(chatId, $"Hello {user.DisplayName}!", ct);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Invalid access token");
             await _tgService.SendMessage(chatId, "Invalid access token", ct);
         }
     }
@@ -153,8 +155,9 @@ public class MainService
         {
             user = await _memoService.GetCurrentUserAsync(accessToken!, ct);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Invalid access token");
             await _tgService.SendMessage(chatId, "Invalid access token", ct);
             return;
         }
@@ -198,8 +201,9 @@ public class MainService
         {
             memo = await _memoService.GetMemoAsync(accessToken!, memoName, ct);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Memo {memoName} not found", memoName);
             await _tgService.AnswerCallbackQuery(callbackQuery.Id, $"Memo {memoName} not found", true, ct);
             return;
         }
@@ -227,8 +231,9 @@ public class MainService
         {
             memo = await _memoService.UpdateMemoAsync(accessToken!, memo, ct);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to update memo callbackQuery.Id = {id}", callbackQuery.Id);
             await _tgService.AnswerCallbackQuery(callbackQuery.Id, "Failed to update memo", showAlert: true, ct);
             return;
         }
