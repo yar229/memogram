@@ -48,7 +48,7 @@ try
             services.ConfigureAndValidate<LocalStorageConfig>(context);
             services.AddSingleton<UserStoreService>();
 
-            services.AddSingleton<IMimeTypeDetector, MimeDetectiveMimeTypeDetector>();
+            services.AddSingleton<IMimeTypeDetector, FileExtensionMimeTypeDetector>();
             services.AddSingleton<MainService>();
         })
         .Build();
