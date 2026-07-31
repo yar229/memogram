@@ -3,7 +3,6 @@ using Memogram.Configs;
 using Memogram.Services.Telegram.Handlers;
 using Memogram.Services.Telegram.Handlers.Commands;
 using Microsoft.Extensions.Logging;
-using System.Net.Mime;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;

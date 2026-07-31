@@ -1,5 +1,4 @@
-﻿using Memogram.Services.Telegram;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using MimeDetective;
 using MimeDetective.Storage;
 using SerilogTimings;
@@ -11,17 +10,20 @@ namespace Memogram.Services.MimeTypeDetectors;
 public class MimeDetectiveMimeTypeDetector : IMimeTypeDetector
 {
     private readonly ILogger<MimeDetectiveMimeTypeDetector> _logger;
-    private IContentInspector _contentInspector;
-    private readonly ImmutableArray<MimeDetective.Storage.Definition> _definitions;
+    private readonly IContentInspector _contentInspector;
+    private readonly IReadOnlyDictionary<string, string> _extensionToMimeType;
+
     public MimeDetectiveMimeTypeDetector(ILogger<MimeDetectiveMimeTypeDetector> logger)
     {
         _logger = logger;
         using (var op = Operation.Time("Loading MimeDetective definitions"))
         {
-            _definitions = MimeDetective.Definitions.DefaultDefinitions.All();
-            _contentInspector = new ContentInspectorBuilder { Definitions = _definitions }.Build();
+            var definitions = MimeDetective.Definitions.DefaultDefinitions.All();
+            _contentInspector = new ContentInspectorBuilder { Definitions = definitions }.Build();
+            _extensionToMimeType = BuildExtensionMap(definitions);
         }
     }
+
     public string Detect(string? filepath, Stream? stream)
     {
         if (!string.IsNullOrEmpty(filepath))
@@ -38,12 +40,11 @@ public class MimeDetectiveMimeTypeDetector : IMimeTypeDetector
         if (string.IsNullOrEmpty(extension))
             return MediaTypeNames.Application.Octet;
 
-        var cleanExt = extension.TrimStart('.').ToLower();
+        var cleanExt = extension.TrimStart('.');
 
-        var matchedType = _definitions
-            .FirstOrDefault(d => d.File.Extensions.Contains(cleanExt));
-
-        return matchedType?.File.MimeType ?? MediaTypeNames.Application.Octet;
+        return _extensionToMimeType.TryGetValue(cleanExt, out var mimeType)
+            ? mimeType
+            : MediaTypeNames.Application.Octet;
     }
 
     public string Detect(Stream stream)
@@ -56,4 +57,17 @@ public class MimeDetectiveMimeTypeDetector : IMimeTypeDetector
         return contentType;
     }
 
+    private static IReadOnlyDictionary<string, string> BuildExtensionMap(ImmutableArray<Definition> definitions)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var definition in definitions)
+        {
+            if (string.IsNullOrEmpty(definition.File.MimeType))
+                continue;
+
+            foreach (var extension in definition.File.Extensions)
+                map.TryAdd(extension, definition.File.MimeType);
+        }
+        return map;
+    }
 }
