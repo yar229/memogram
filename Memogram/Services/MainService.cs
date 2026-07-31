@@ -245,25 +245,15 @@ public class MainService
 
     private async Task ProcessFileMessage(string accessToken, long chatId, string fileId, Memo memo, CancellationToken ct)
     {
+        var (filepath, contentStream) = await _tgService.GetFileAsync(fileId, ct);
         try
         {
-            
-            var (filepath, contentStream) = await _tgService.GetFileAsync(fileId, ct);
-
-            //ms.Position = 0;
-            //var bestMatch = _contentInspector.Inspect(ms).ByMimeType().FirstOrDefault();
+            //var bestMatch = _contentInspector.Inspect(contentStream).ByMimeType().FirstOrDefault();
             //var contentType = null != bestMatch && !string.IsNullOrEmpty(bestMatch.MimeType)
             //    ? bestMatch.MimeType
             //    : MediaTypeNames.Application.Octet;
 
-            //var contentType = MediaTypeNames.Application.Octet;
-
-            //var bytes = ms.ToArray();
-
-            var bestMatch = _contentInspector.Inspect(contentStream).ByMimeType().FirstOrDefault();
-            var contentType = null != bestMatch && !string.IsNullOrEmpty(bestMatch.MimeType)
-                ? bestMatch.MimeType
-                : MediaTypeNames.Application.Octet;
+            var contentType = MediaTypeNames.Application.Octet;
 
             await _memoService.ProcessFileMessage(accessToken, 
                 new MemogramService.FileInfo { FilePath = filepath, Content = contentStream, ContentType = contentType },
@@ -272,6 +262,10 @@ public class MainService
         catch (Exception ex)
         {
             await _tgService.SendError(chatId, new InvalidOperationException($"Failed to save attachment: {ex.Message}"), ct);
+        }
+        finally
+        {
+            await contentStream.DisposeAsync();
         }
     }
 }

@@ -163,24 +163,36 @@ public class TelegramService
     /// <exception cref="FileNotFoundException"></exception>
     public async Task<(string filePath, Stream content)> GetFileAsync(string fileId, CancellationToken ct)
     {
-        //var file = await _bot.GetFile(fileId, cancellationToken: ct);
-        //if (null == file)
-        //    throw new FileNotFoundException($"Telegram cannot find file with fileId = {fileId}" );
-
-        //await _bot.DownloadFile(file, ms, ct);
-        //return file.FilePath!;
-
         var file = await _bot.GetFile(fileId, cancellationToken: ct);
         if (null == file)
             throw new FileNotFoundException($"Telegram cannot find file with fileId = {fileId}");
         var fileLink = $"https://api.telegram.org/file/bot{_config.BotToken}/{file.FilePath!}";
 
-        var response = await _bot.HttpClient.GetAsync(fileLink, ct);
+        //var response = await _bot.HttpClient.GetAsync(fileLink, ct);
+        var response = await _bot.HttpClient.GetAsync(fileLink, HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
 
-        //var bytes = await response.Content.ReadAsByteArrayAsync(ct);
-        //var contentType = response.Content.Headers.ContentType?.MediaType ?? MediaTypeNames.Application.Octet;
-        return (file.FilePath!, await response.Content.ReadAsStreamAsync());
+        //var fileName = Path.GetFileName(file.FilePath);
+        //var tempPath = Path.Combine(Path.GetTempPath(),
+        //    $"{Guid.NewGuid():N}_{(string.IsNullOrEmpty(fileName) ? "file" : fileName)}");
+
+        //var fileStream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.ReadWrite,
+        //    FileShare.Read, 81920, FileOptions.SequentialScan | FileOptions.DeleteOnClose);
+        //try
+        //{
+        //    await response.Content.CopyToAsync(fileStream, ct);
+        //}
+        //catch
+        //{
+        //    await fileStream.DisposeAsync();
+        //    throw;
+        //}
+
+        //fileStream.Position = 0;
+        //return (file.FilePath!, fileStream);
+
+        var stream = await response.Content.ReadAsStreamAsync(ct);
+        return (file.FilePath!, stream);
     }
 
     public async Task SendError(long chatId, Exception ex, CancellationToken ct)

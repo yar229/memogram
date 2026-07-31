@@ -14,7 +14,7 @@ public class CreateAttachmentRequest
     /// The content of the attachment.
     /// </summary>
     [JsonPropertyName("content")]
-    [JsonConverter(typeof(JsonStreamConverter))]
+    //[JsonConverter(typeof(JsonStreamConverter))]
     public required Stream Content { get; set; }
 
     /// <summary>
