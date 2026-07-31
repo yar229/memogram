@@ -1,6 +1,6 @@
 ﻿using Telegram.Bot.Types;
 
-namespace Memogram.Services;
+namespace Memogram.Services.Telegram.Handlers.Commands;
 
 public interface ICmdHandler
 {

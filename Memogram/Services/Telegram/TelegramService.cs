@@ -1,5 +1,7 @@
 ﻿using Memogram.Clients.Telegram;
 using Memogram.Configs;
+using Memogram.Services.Telegram.Handlers;
+using Memogram.Services.Telegram.Handlers.Commands;
 using Microsoft.Extensions.Logging;
 using System.Net.Mime;
 using Telegram.Bot;
@@ -18,8 +20,8 @@ public class TelegramService
     private readonly IMyTelegramBotClient _bot;
     private readonly HashSet<string> _allowedUsernames;
     private ICmdHandler[] _botCommands = null!;
-    private Func<Message, CancellationToken, Task> _handleMessage = null!;
-    private Func<CallbackQuery, CancellationToken, Task> _handleCallback = null!;
+    private MessageHandler _handleMessage = null!;
+    private CallbackQueryHandler _handleCallback = null!;
 
     public TelegramService(TelegramConfig config, IMyTelegramBotClient bot, ILogger<TelegramService> logger)
     {
@@ -31,20 +33,14 @@ public class TelegramService
     }
 
     public async Task Start(IEnumerable<ICmdHandler> cmdHandlers,
-        //Func<Message, string, CancellationToken, Task> startHandler,
-        //Func<Message, string, CancellationToken, Task> searchHandler,
-        Func<Message, CancellationToken, Task> handleMessage,
-        Func<CallbackQuery, CancellationToken, Task> handleCallback,
-        
+        MessageHandler handleMessage,
+        CallbackQueryHandler handleCallback,
         CancellationToken ct = default)
     {
         _handleMessage = handleMessage;
         _handleCallback = handleCallback;
 
         _botCommands = cmdHandlers.ToArray();
-            //[
-            //new BotCommandHandler{Command = new BotCommand("/start", "Usage: /start <memos_user_access_token>"), Handler = startHandler },
-            //new BotCommandHandler{Command = new BotCommand("/search", "Usage: /search <what_to_search>"), Handler = searchHandler } ];
         await _bot.SetMyCommands(_botCommands.Select(bc => new BotCommand(bc.Command, bc.Usage)));
 
         _bot.StartReceiving(
@@ -68,50 +64,6 @@ public class TelegramService
         return _allowedUsernames.Contains(username.Trim().ToLowerInvariant());
     }
 
-    public async Task SendMessageSaved(Message message, long chatId, string memoname, string msg, CancellationToken ct)
-    {
-        if (string.IsNullOrEmpty(_config.OnlyLikeSavedMessageWith))
-        {
-            var inlineKeyboard = BuildKeyboard(memoname);
-            await _bot.SendMessage(
-                chatId,
-                msg,
-                parseMode: ParseMode.Markdown,
-                disableNotification: true,
-                replyParameters: new ReplyParameters { MessageId = message.MessageId },
-                replyMarkup: inlineKeyboard,
-                cancellationToken: ct
-            );
-        }
-        else
-        {
-            var likeReaction = new ReactionTypeEmoji { Emoji = _config.OnlyLikeSavedMessageWith };
-            await _bot.SetMessageReaction(chatId, message.Id, [likeReaction]);
-        }
-    }
-
-    public Task<Message> EditMessageText(long chatId, int messageId, string message, ParseMode parseMode, InlineKeyboardMarkup inlineKeyboard, CancellationToken ct) 
-        => _bot.EditMessageText(chatId, messageId,
-                    message,
-                    parseMode: parseMode, replyMarkup: inlineKeyboard,
-                    cancellationToken: ct
-                );
-
-    public Task AnswerCallbackQuery(string callbackQueryId, string message, bool showAlert, CancellationToken ct) 
-        => _bot.AnswerCallbackQuery(callbackQueryId, message, showAlert: showAlert, cancellationToken: ct);
-
-
-    public InlineKeyboardMarkup BuildKeyboard(string memoname)
-    {
-        return new InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton.WithCallbackData("Public", $"public {memoname}"),
-                InlineKeyboardButton.WithCallbackData("Private", $"private {memoname}"),
-                InlineKeyboardButton.WithCallbackData("Pin", $"pin {memoname}"),
-            ]
-        ]);
-    }
 
     public async Task SendMemoMessage(string baseUrl, string memoUrl, string content, long chatId, CancellationToken ct)
     {
@@ -129,13 +81,13 @@ public class TelegramService
     }
 
 
-    private async Task HandleUpdateAsync(ITelegramBotClient _, Update update, CancellationToken ct)
+    private async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken ct)
     {
         try
         {
             if (update.CallbackQuery is { } callbackQuery)
             {
-                await _handleCallback(callbackQuery, ct);
+                await _handleCallback.HandleAsync(bot, callbackQuery, ct);
                 return;
             }
 
@@ -153,19 +105,7 @@ public class TelegramService
         }
     }
 
-    public async Task<(string filePath, Stream content)> GetFileAsync(string fileId, CancellationToken ct)
-    {
-        var file = await _bot.GetFile(fileId, cancellationToken: ct);
-        if (null == file)
-            throw new FileNotFoundException($"Telegram cannot find file with fileId = {fileId}");
-        var fileLink = $"https://api.telegram.org/file/bot{_config.BotToken}/{file.FilePath!}";
 
-        var response = await _bot.HttpClient!.GetAsync(fileLink, HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
-
-        var stream = await response.Content.ReadAsStreamAsync(ct);
-        return (file.FilePath!, stream);
-    }
 
     public async Task SendError(long chatId, Exception ex, CancellationToken ct)
     {
@@ -200,7 +140,7 @@ public class TelegramService
         if (processed)
             return;
 
-        await _handleMessage(message, ct);
+        await _handleMessage.HandleAsync(_bot, message, ct);
     }
 
     private Task HandleErrorAsync(ITelegramBotClient _, Exception exception, CancellationToken ct)

@@ -16,9 +16,9 @@ public class UserStoreService
     private readonly ConcurrentDictionary<long, string> _userAccessTokenCache = new();
     private readonly ILogger<UserStoreService> _logger;
 
-    public Task InitializeAsync()
+    public Task InitializeAsync(CancellationToken ct)
     {
-        return LoadFromFileAsync();
+        return LoadFromFileAsync(ct);
     }
 
     public bool TryGetUserAccessToken(long userId, out string? accessToken)
@@ -32,16 +32,16 @@ public class UserStoreService
         return SaveToFileAsync();
     }
 
-    private async Task LoadFromFileAsync()
+    private async Task LoadFromFileAsync(CancellationToken ct)
     {
         _logger.LogInformation($"Loading users data from {_dataPath}");
         if (!File.Exists(_dataPath))
         {
-            await File.WriteAllTextAsync(_dataPath, string.Empty);
+            await File.WriteAllTextAsync(_dataPath, string.Empty, ct);
             return;
         }
 
-        await foreach (string line in File.ReadLinesAsync(_dataPath))
+        await foreach (string line in File.ReadLinesAsync(_dataPath, ct))
         {
             var trimmed = line.Trim();
             if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith('#'))
