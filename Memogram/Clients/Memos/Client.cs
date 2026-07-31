@@ -72,14 +72,14 @@ public class MemosClient
 
     public async Task<InstanceProfile> GetInstanceProfileAsync(CancellationToken ct = default)
     {
-        var response = await RetryAsync(ct2 => _httpClient.GetAsync(Url("/api/v1/instance/profile"), ct2), ct);
+        using var response = await RetryAsync(ct2 => _httpClient.GetAsync(Url("/api/v1/instance/profile"), ct2), ct);
         await ThrowIfNotSuccessAsync(response, ct);
         return (await response.Content.ReadFromJsonAsync<InstanceProfile>(cancellationToken: ct))!;
     }
 
     public async Task<User> GetCurrentUserAsync(string accessToken, CancellationToken ct = default)
     {
-        var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Get, Url("/api/v1/auth/me"), accessToken, ct2), ct);
+        using var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Get, Url("/api/v1/auth/me"), accessToken, ct2), ct);
         await ThrowIfNotSuccessAsync(response, ct);
         var wrapper = await response.Content.ReadFromJsonAsync<UserWrapper>(cancellationToken: ct);
         return wrapper?.User ?? throw new InvalidOperationException("No user in response");
@@ -102,7 +102,7 @@ public class MemosClient
             Content = doAddTags ? sb!.ToString() : content,
             Visibility = visibility,
         };
-        var response = await SendWithAuthAsync(HttpMethod.Post, Url("/api/v1/memos"), accessToken, body, ct);
+        using var response = await SendWithAuthAsync(HttpMethod.Post, Url("/api/v1/memos"), accessToken, body, ct);
         await ThrowIfNotSuccessAsync(response, ct);
         var memo = await response.Content.ReadFromJsonAsync<Memo>(cancellationToken: ct);
         return memo ?? throw new InvalidOperationException("No memo in response");
@@ -110,7 +110,7 @@ public class MemosClient
 
     public async Task<Memo> GetMemoAsync(string accessToken, string name, CancellationToken ct = default)
     {
-        var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Get, Url($"/api/v1/{name}"), accessToken, ct2), ct);
+        using var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Get, Url($"/api/v1/{name}"), accessToken, ct2), ct);
         await ThrowIfNotSuccessAsync(response, ct);
         var wrapper = await response.Content.ReadFromJsonAsync<Memo>(cancellationToken: ct);
         return wrapper ?? throw new InvalidOperationException("No memo in response");
@@ -124,7 +124,7 @@ public class MemosClient
             Visibility = memo.Visibility,
             Pinned = memo.Pinned,
         };
-        var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Patch, Url($"/api/v1/{memo.Name}"), accessToken, body, ct2), ct);
+        using var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Patch, Url($"/api/v1/{memo.Name}"), accessToken, body, ct2), ct);
         await ThrowIfNotSuccessAsync(response, ct);
         var wrapper = await response.Content.ReadFromJsonAsync<Memo>(cancellationToken: ct);
         return wrapper ?? throw new InvalidOperationException("No memo in response");
@@ -137,7 +137,7 @@ public class MemosClient
         {
             url += $"&filter={Uri.EscapeDataString(filter)}";
         }
-        var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Get, Url(url), accessToken, ct2), ct);
+        using var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Get, Url(url), accessToken, ct2), ct);
         await ThrowIfNotSuccessAsync(response, ct);
         var result = await response.Content.ReadFromJsonAsync<ListMemosResponse>(cancellationToken: ct);
         return result?.Memos ?? new List<Memo>();
@@ -152,7 +152,7 @@ public class MemosClient
             Type = contentType,
             Content = content
         };
-        var response = await SendWithAuthContentAsync(HttpMethod.Post, Url("/api/v1/attachments"), accessToken, new AttachmentJsonContent(body), ct);
+        using var response = await SendWithAuthContentAsync(HttpMethod.Post, Url("/api/v1/attachments"), accessToken, new AttachmentJsonContent(body), ct);
         await ThrowIfNotSuccessAsync(response, ct);
         var res = await response.Content.ReadFromJsonAsync<CreateAttachmentResponse>(cancellationToken: ct);
         return res ?? throw new InvalidOperationException("No attachment in response");
