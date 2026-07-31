@@ -17,7 +17,7 @@ public class TelegramService
     private readonly ILogger<TelegramService> _logger;
     private readonly IMyTelegramBotClient _bot;
     private readonly HashSet<string> _allowedUsernames;
-    private BotCommandHandler[] _botCommands = null!;
+    private ICmdHandler[] _botCommands = null!;
     private Func<Message, CancellationToken, Task> _handleMessage = null!;
     private Func<CallbackQuery, CancellationToken, Task> _handleCallback = null!;
 
@@ -30,9 +30,9 @@ public class TelegramService
         _allowedUsernames = ParseAllowedUsernames(config.AllowedUsernames);
     }
 
-    public async Task Start(
-        Func<Message, string, CancellationToken, Task> startHandler,
-        Func<Message, string, CancellationToken, Task> searchHandler,
+    public async Task Start(IEnumerable<ICmdHandler> cmdHandlers,
+        //Func<Message, string, CancellationToken, Task> startHandler,
+        //Func<Message, string, CancellationToken, Task> searchHandler,
         Func<Message, CancellationToken, Task> handleMessage,
         Func<CallbackQuery, CancellationToken, Task> handleCallback,
         
@@ -41,15 +41,16 @@ public class TelegramService
         _handleMessage = handleMessage;
         _handleCallback = handleCallback;
 
-        _botCommands = [
-            new BotCommandHandler{Command = new BotCommand("/start", "Usage: /start <memos_user_access_token>"), Handler = startHandler },
-            new BotCommandHandler{Command = new BotCommand("/search", "Usage: /search <what_to_search>"), Handler = searchHandler } ];
-        await _bot.SetMyCommands(_botCommands.Select(bc => bc.Command));
+        _botCommands = cmdHandlers.ToArray();
+            //[
+            //new BotCommandHandler{Command = new BotCommand("/start", "Usage: /start <memos_user_access_token>"), Handler = startHandler },
+            //new BotCommandHandler{Command = new BotCommand("/search", "Usage: /search <what_to_search>"), Handler = searchHandler } ];
+        await _bot.SetMyCommands(_botCommands.Select(bc => new BotCommand(bc.Command, bc.Usage)));
 
         _bot.StartReceiving(
             HandleUpdateAsync,
             HandleErrorAsync,
-            new ReceiverOptions { AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery] },
+            new ReceiverOptions { AllowedUpdates = [UpdateType.Message, UpdateType.EditedMessage, UpdateType.CallbackQuery] },
             cancellationToken: ct);
 
         _logger.LogInformation("Bot is listening...");
@@ -234,12 +235,12 @@ public class TelegramService
 
         string fullCommand = message.Text.Substring(entity.Offset, entity.Length);
         string cleanCommand = fullCommand.Split('@')[0].ToLower();
-        var command = _botCommands.FirstOrDefault(cmd => cmd.Command.Command == cleanCommand);
-        if (null == command)
+        var handler = _botCommands.FirstOrDefault(h => h.Command == cleanCommand);
+        if (null == handler)
             return false;
 
         string arguments = message.Text.Substring(entity.Offset + entity.Length).Trim();
-        await command.Handler(message, arguments, ct);
+        await handler.Handle(message, arguments, ct);
         return true;
     }
 

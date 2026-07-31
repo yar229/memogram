@@ -2,6 +2,7 @@
 using Memogram.Services.Memos;
 using Memogram.Services.MimeTypeDetectors;
 using Memogram.Services.Telegram;
+using Memogram.Services.Telegram.Handlers.Commands;
 using Memogram.Services.UserStore;
 using Microsoft.Extensions.Logging;
 using System.Net.Mime;
@@ -20,13 +21,14 @@ public class MainService
     private readonly IMimeTypeDetector _mimeTypeDetector;
 
     private readonly ILogger<MainService> _logger;
-    
+    private readonly ILoggerFactory _loggerFactory;
 
     public MainService(UserStoreService storeService, TelegramService tgService, MemogramService memoService,
         IMimeTypeDetector mimeTypeDetector,
-        ILogger<MainService> logger)
+        ILogger<MainService> logger, ILoggerFactory loggerFactory)
     {
         _logger = logger;
+        _loggerFactory = loggerFactory;
         _tgService = tgService;
         _memoService = memoService;
 
@@ -45,7 +47,10 @@ public class MainService
         _logger.LogInformation("Instance profile: {Profile}", JsonSerializer.Serialize(_memoService.InstanceProfile));
 
         await _tgService
-            .Start(StartHandler, SearchHandler,
+            .Start([ 
+                    new CmdStartHandler(_memoService, _tgService, _storeService, _loggerFactory.CreateLogger<CmdStartHandler>()),
+                    new CmdSearchHandler(_memoService, _tgService, _storeService, _loggerFactory.CreateLogger<CmdSearchHandler>())
+                ],
                 HandleMessageAsync, HandleCallbackQueryAsync,
                 ct);
             //.ContinueWith(t => 
@@ -108,69 +113,6 @@ public class MainService
         var memoUid = MemogramService.ExtractMemoUidFromName(memo.Name);
         string msg = $"Content saved as {memo.Visibility} with [{memo.Name}]({_memoService.BaseUrl}/memos/{memoUid})";
         await _tgService.SendMessageSaved(message, chatId, memo.Name, msg, ct);
-    }
-
-    public async Task StartHandler(Message message, string accessToken, CancellationToken ct)
-    {
-        var chatId = message.Chat.Id;
-        accessToken = accessToken.Trim();
-
-        if (string.IsNullOrEmpty(accessToken))
-        {
-            await _tgService.SendMessage(chatId, "Usage: /start <access_token>", ct);
-            return;
-        }
-
-        try
-        {
-            var user = await _memoService.GetCurrentUserAsync(accessToken, ct);
-            await _storeService.SetUserAccessTokenAsync(message.From!.Id, accessToken);
-            await _tgService.SendMessage(chatId, $"Hello {user.DisplayName}!", ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Invalid access token");
-            await _tgService.SendMessage(chatId, "Invalid access token", ct);
-        }
-    }
-
-    private async Task SearchHandler(Message message, string searchString, CancellationToken ct)
-    {
-        var chatId = message.Chat.Id;
-
-        if (string.IsNullOrEmpty(searchString))
-        {
-            await _tgService.SendMessage(chatId, "Usage: /search <words>", ct);
-            return;
-        }
-
-        if (!_storeService.TryGetUserAccessToken(message.From!.Id, out var accessToken) || string.IsNullOrEmpty(accessToken))
-        {
-            await _tgService.SendMessage(chatId, "Please start the bot with /start <access_token>", ct);
-            return;
-        }
-
-        Clients.Memos.Models.User? user;
-        try
-        {
-            user = await _memoService.GetCurrentUserAsync(accessToken!, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Invalid access token");
-            await _tgService.SendMessage(chatId, "Invalid access token", ct);
-            return;
-        }
-
-        var memos = await _memoService.SearchMemoAsync(searchString, accessToken!, user.Name, user.Username, ct);
-
-        if (memos.Count == 0)
-            await _tgService.SendMessage(chatId, "No memos found for the specified search criteria.", ct);
-        else
-        {
-            foreach (var memo in memos)
-                await _tgService.SendMemoMessage(_memoService.BaseUrl, memo.Name, memo.Content, chatId, ct);
-        }
     }
 
     private async Task HandleCallbackQueryAsync(CallbackQuery callbackQuery, CancellationToken ct)
