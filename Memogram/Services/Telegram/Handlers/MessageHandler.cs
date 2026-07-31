@@ -134,7 +134,7 @@ public class MessageHandler
         var file = await bot.GetFile(fileId, cancellationToken: ct);
         if (null == file)
             throw new FileNotFoundException($"Telegram cannot find file with fileId = {fileId}");
-        var fileLink = $"https://api.telegram.org/file/bot{_config.BotToken}/{file.FilePath!}";
+        var fileLink = $"{_config.BotProxyAddr}/file/bot{_config.BotToken}/{file.FilePath!}";
 
         var response = await bot.HttpClient!.GetAsync(fileLink, HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
