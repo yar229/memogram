@@ -13,6 +13,8 @@ public class TelegramConfig : IValidableConfig
     
     public required int SearchReplyMessagesTrim { get; set; } = 200;
 
+    public TimeSpan CacheMessageForEditTime { get; set; } = TimeSpan.FromHours(1);
+
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(BotToken))

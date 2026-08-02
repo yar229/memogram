@@ -49,6 +49,7 @@ try
     builder.Services.AddSingleton<MessageHandler>();
     builder.Services.AddSingleton<CallbackQueryHandler>();
     builder.Services.AddSingleton<TelegramService>();
+    builder.Services.AddSingleton<MemoLinkCache>();
 
     builder.Services.ConfigureAndValidate<LocalStorageConfig>(builder.Configuration);
     builder.Services.AddSingleton<UserStoreService>();

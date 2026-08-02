@@ -18,11 +18,13 @@ public class MessageHandler
     private readonly MemogramService _memoService;
     private readonly TelegramConfig _config;
     private readonly IMimeTypeDetector _mimeTypeDetector;
+    private readonly MemoLinkCache _linkCache;
     private readonly ILogger<MessageHandler> _logger;
 
     public MessageHandler(UserStoreService storeService, IMyTelegramBotClient tgBotClient, MemogramService memoService,
         TelegramConfig config,
         IMimeTypeDetector mimeTypeDetector,
+        MemoLinkCache linkCache,
         ILogger<MessageHandler> logger)
     {
         _storeService = storeService;
@@ -30,6 +32,7 @@ public class MessageHandler
         _memoService = memoService;
         _config = config;
         _mimeTypeDetector = mimeTypeDetector;
+        _linkCache = linkCache;
         _logger = logger;
     }
 
@@ -61,10 +64,11 @@ public class MessageHandler
         try
         {
             memo = await _memoService.HandleMemoCreation(accessToken!, message.MediaGroupId, content, ct);
+            _logger.LogInformation("Memo {MemoName} created from message (chat {ChatId}, message {MessageId})", memo.Name, chatId, message.Id);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to create memo");
+            _logger.LogError(ex, "Failed to create memo from message (chat {ChatId}, message {MessageId})", chatId, message.Id);
             await _tgBotClient.SendMessage(chatId, "Failed to create memo", cancellationToken: ct);
             return;
         }
@@ -84,26 +88,72 @@ public class MessageHandler
         var memoUid = MemogramService.ExtractMemoUidFromName(memo.Name);
         string msg = $"Content saved as {memo.Visibility} with [{memo.Name}]({_memoService.BaseUrl}/memos/{memoUid})";
         await SendMessageSaved(message, chatId, memo.Name, msg, ct);
+
+        _linkCache.Record(message.Chat.Id, message.Id, memo.Name);
+    }
+
+    public async Task HandleEditedAsync(Message message, CancellationToken ct)
+    {
+        var chatId = message.Chat.Id;
+
+        if (!_linkCache.TryGetMemoName(chatId, message.Id, out var memoName) || memoName is null)
+        {
+            _logger.LogWarning("Memo not found in cache for edited message (chat {ChatId}, message {MessageId})", chatId, message.Id);
+            var likeReaction = new ReactionTypeEmoji { Emoji = "🥴" };
+            await _tgBotClient.SetMessageReaction(chatId, message.Id, [likeReaction]);
+            return;
+        }
+
+        var from = message.From;
+        if (from is null || !_storeService.TryGetUserAccessToken(from.Id, out var accessToken) || string.IsNullOrEmpty(accessToken))
+            return;
+
+        string content = _memoService.PrepareMessageContent(message);
+        if (string.IsNullOrEmpty(content))
+            return;
+
+        try
+        {
+            var memo = await _memoService.GetMemoAsync(accessToken!, memoName, ct);
+            if (memo.Content == content)
+                return;
+
+            memo.Content = content;
+            await _memoService.UpdateMemoAsync(accessToken!, memo, ct);
+            _logger.LogInformation("Memo {MemoName} updated from edited message (chat {ChatId}, message {MessageId})", memoName, chatId, message.Id);
+
+            var likeReaction = new ReactionTypeEmoji { Emoji = "✍" };
+            await _tgBotClient.SetMessageReaction(chatId, message.Id, [likeReaction]);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update memo {MemoName} from edited message", memoName);
+        }
     }
 
     private async Task ProcessFileMessage(string accessToken, long chatId, string fileId, Memo memo, CancellationToken ct)
     {
-        var (filepath, contentStream) = await GetFileAsync(fileId, ct);
+        string filepath = string.Empty;
+        Stream? contentStream = null;
         try
         {
+            (filepath, contentStream) = await GetFileAsync(fileId, ct);
             var contentType = _mimeTypeDetector.Detect(filepath, contentStream);
 
             await _memoService.ProcessFileMessage(accessToken,
                 new MemogramService.FileInfo { FilePath = filepath, Content = contentStream, ContentType = contentType },
                 memo, ct);
+            _logger.LogInformation("Attachment {FilePath} created for memo {MemoName} from (chat {ChatId}, file {FileId})", filepath, memo.Name, chatId, fileId);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to save attachment {FilePath} for memo {MemoName} from (chat {ChatId}, file {FileId})", filepath, memo.Name, chatId, fileId);
             await SendError(chatId, new InvalidOperationException($"Failed to save attachment: {ex.Message}"), ct);
         }
         finally
         {
-            await contentStream.DisposeAsync();
+            if (null != contentStream)
+                await contentStream.DisposeAsync();
         }
     }
 
@@ -145,7 +195,6 @@ public class MessageHandler
 
     public async Task SendError(long chatId, Exception ex, CancellationToken ct)
     {
-        _logger.LogError(ex, ex.Message);
         try
         {
             await _tgBotClient.SendMessage(chatId, $"Error: {ex.Message}", cancellationToken: ct);

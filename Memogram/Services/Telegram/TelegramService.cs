@@ -47,7 +47,7 @@ public class TelegramService
         _bot.StartReceiving(
             HandleUpdateAsync,
             HandleErrorAsync,
-            new ReceiverOptions { AllowedUpdates = [UpdateType.Message, /* UpdateType.EditedMessage, */ UpdateType.CallbackQuery] },
+            new ReceiverOptions { AllowedUpdates = [UpdateType.Message, UpdateType.EditedMessage, UpdateType.CallbackQuery] },
             cancellationToken: ct);
 
         _logger.LogInformation("Bot is listening...");
@@ -69,6 +69,12 @@ public class TelegramService
             if (update.CallbackQuery is { } callbackQuery)
             {
                 await _callbackQueryHandler.HandleAsync(callbackQuery, ct);
+                return;
+            }
+
+            if (update.EditedMessage is { } editedMessage)
+            {
+                await HandleEditedMessageAsync(editedMessage, ct);
                 return;
             }
 
@@ -106,6 +112,15 @@ public class TelegramService
             return;
 
         await _messageHandler.HandleAsync(message, ct);
+    }
+
+    private async Task HandleEditedMessageAsync(Message message, CancellationToken ct)
+    {
+        var from = message.From;
+        if (from is null || !IsUserAllowed(from.Username))
+            return;
+
+        await _messageHandler.HandleEditedAsync(message, ct);
     }
 
     private Task HandleErrorAsync(ITelegramBotClient _, Exception exception, CancellationToken ct)

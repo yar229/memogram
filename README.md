@@ -8,4 +8,4 @@ Some functionality added:
 - serilog logging
 - memos and telegram http requests retries
 - WebAPI: healscheck enpoint /api/health
-  
+- when telegram message edited changes applies to memo  
