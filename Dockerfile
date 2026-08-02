@@ -9,5 +9,6 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 ENV Memogram__ServerAddr=localhost:5230
 ENV Telegram__BotToken=your_telegram_bot_token
+EXPOSE 8080
 COPY --from=build /app/publish .
 ENTRYPOINT ["dotnet", "Memogram.dll"]

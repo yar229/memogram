@@ -2,12 +2,16 @@
 using Memogram.Clients.Memos;
 using Memogram.Configs;
 using Memogram.Services;
+using Memogram.Services.Health;
 using Memogram.Services.Memos;
 using Memogram.Services.MimeTypeDetectors;
 using Memogram.Services.Telegram;
 using Memogram.Services.Telegram.Handlers;
 using Memogram.Services.Telegram.Handlers.Commands;
 using Memogram.Services.UserStore;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -20,64 +24,54 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
-    var host = Host.CreateDefaultBuilder(args)
-        .UseSerilog((context, services, configuration) => configuration
-            .ReadFrom.Configuration(context.Configuration))
-        .ConfigureAppConfiguration((context, config) =>
-        {
-            config.SetBasePath(AppContext.BaseDirectory);
-            config.AddJsonFile("appsettings.json", optional: false, reloadOnChange: false);
-            config.AddJsonFile($"appsettings.{context.HostingEnvironment.EnvironmentName}.json", optional: true, reloadOnChange: false);
-        })
-        .ConfigureServices((context, services) =>
-        {
-            services.ConfigureAndValidate<MemogramConfig>(context);
-            services.AddMemoryCache();
-            services.AddSingleton<MemosClient>();
-            services.AddSingleton<MemogramService>();
-
-
-            services.ConfigureAndValidate<TelegramConfig>(context);
-            services.AddTelegramClient("telegram_bot_client");
-            services.AddSingleton<ICmdHandler, CmdStartHandler>();
-            services.AddSingleton<ICmdHandler, CmdSearchHandler>();
-            services.AddSingleton<MessageHandler>();
-            services.AddSingleton<CallbackQueryHandler>();
-            services.AddSingleton<TelegramService>();
-
-            services.ConfigureAndValidate<LocalStorageConfig>(context);
-            services.AddSingleton<UserStoreService>();
-
-            services.AddSingleton<IMimeTypeDetector, FileExtensionMimeTypeDetector>();
-            services.AddSingleton<MainService>();
-        })
-        .Build();
-
-    var cts = new CancellationTokenSource();
-    Console.CancelKeyPress += (_, e) =>
+    var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     {
-        e.Cancel = true;
-        cts.Cancel();
-    };
+        Args = args,
+        ContentRootPath = AppContext.BaseDirectory,
+    });
 
-    var service = host.Services.GetRequiredService<MainService>();
-    var logger = host.Services.GetRequiredService<ILogger<Program>>();
+    builder.Host.UseSerilog((context, services, configuration) => configuration
+        .ReadFrom.Configuration(context.Configuration));
 
-    try
-    {
-        await service.Start(cts.Token);
-    }
-    catch (OperationCanceledException)
-    {
-        logger.LogInformation("Shutting down...");
-    }
-    catch (Exception ex)
-    {
-        logger.LogCritical(ex, "Fatal error during startup");
-        return 1;
-    }
+    var webConfig = builder.Configuration.GetSection(WebConfig.SectionName).Get<WebConfig>();
+    builder.WebHost.UseUrls($"{webConfig!.Address}:{webConfig.Port}");
 
+    builder.Services.ConfigureAndValidate<MemogramConfig>(builder.Configuration);
+    builder.Services.AddMemoryCache();
+    builder.Services.AddSingleton<MemosClient>();
+    builder.Services.AddSingleton<MemogramService>();
+
+
+    builder.Services.ConfigureAndValidate<TelegramConfig>(builder.Configuration);
+    builder.Services.AddTelegramClient("telegram_bot_client");
+    builder.Services.AddSingleton<ICmdHandler, CmdStartHandler>();
+    builder.Services.AddSingleton<ICmdHandler, CmdSearchHandler>();
+    builder.Services.AddSingleton<MessageHandler>();
+    builder.Services.AddSingleton<CallbackQueryHandler>();
+    builder.Services.AddSingleton<TelegramService>();
+
+    builder.Services.ConfigureAndValidate<LocalStorageConfig>(builder.Configuration);
+    builder.Services.AddSingleton<UserStoreService>();
+
+    builder.Services.ConfigureAndValidate<WebConfig>(builder.Configuration);
+    builder.Services.AddSingleton<HealthCheckService>();
+
+    builder.Services.AddSingleton<IMimeTypeDetector, FileExtensionMimeTypeDetector>();
+
+    builder.Services.AddHostedService<MainService>();
+
+    builder.Services.AddControllers();
+    
+
+    var app = builder.Build();
+    app.MapControllers();
+    await app.RunAsync();
     return 0;
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Host terminated unexpectedly");
+    return 1;
 }
 finally
 {

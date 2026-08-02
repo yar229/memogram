@@ -82,4 +82,32 @@ public class ConfigTests
         config.Validate();
         Assert.True(Path.IsPathRooted(config.Filename));
     }
+
+    //[Fact]
+    //public void HealthConfig_Validate_ThrowsOnInvalidPort()
+    //{
+    //    var config = new WebConfig { Port = 70000 };
+    //    Assert.Throws<InvalidOperationException>(config.Validate);
+    //}
+
+    //[Fact]
+    //public void HealthConfig_Validate_ThrowsOnPathWithoutLeadingSlash()
+    //{
+    //    var config = new WebConfig { Port = 8080, Path = "health" };
+    //    Assert.Throws<InvalidOperationException>(config.Validate);
+    //}
+
+    //[Fact]
+    //public void HealthConfig_Validate_ThrowsOnInvalidTimeout()
+    //{
+    //    var config = new WebConfig { Port = 8080, HealthCheckTimeoutSeconds = 0 };
+    //    Assert.Throws<InvalidOperationException>(config.Validate);
+    //}
+
+    //[Fact]
+    //public void HealthConfig_Validate_PassesWithValidValues()
+    //{
+    //    var config = new WebConfig { Port = 8080, Path = "/health", HealthCheckTimeoutSeconds = 10 };
+    //    config.Validate();
+    //}
 }

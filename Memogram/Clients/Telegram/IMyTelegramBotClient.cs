@@ -4,5 +4,7 @@ namespace Memogram.Clients.Telegram;
 
 public interface IMyTelegramBotClient : ITelegramBotClient
 {
-    HttpClient? HttpClient { get;}
+    HttpClient? HttpClient { get; }
+
+    TelegramBotClientOptions Options { get; }
 }

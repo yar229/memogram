@@ -2,12 +2,13 @@
 using Memogram.Services.Telegram;
 using Memogram.Services.Telegram.Handlers;
 using Memogram.Services.UserStore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace Memogram.Services;
 
-public class MainService
+public class MainService : BackgroundService
 {
     private readonly UserStoreService _storeService;
     private readonly TelegramService _tgService;
@@ -16,14 +17,12 @@ public class MainService
     private readonly CallbackQueryHandler _callbackQueryHandler;
 
     private readonly ILogger<MainService> _logger;
-    private readonly ILoggerFactory _loggerFactory;
 
     public MainService(UserStoreService storeService, TelegramService tgService, MemogramService memoService,
         MessageHandler messageHandler, CallbackQueryHandler callbackQueryHandler,
-        ILogger<MainService> logger, ILoggerFactory loggerFactory)
+        ILogger<MainService> logger)
     {
         _logger = logger;
-        _loggerFactory = loggerFactory;
         _tgService = tgService;
         _memoService = memoService;
         _storeService = storeService;
@@ -31,17 +30,24 @@ public class MainService
         _callbackQueryHandler = callbackQueryHandler;
     }
 
-    public async Task Start(CancellationToken ct = default)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Memogram starting...");
 
-        await _storeService.InitializeAsync(ct);
-        await _memoService.InitializeAsync(ct);
+        await _storeService.InitializeAsync(stoppingToken);
+        await _memoService.InitializeAsync(stoppingToken);
 
         _logger.LogInformation("Instance profile: {Profile}", JsonSerializer.Serialize(_memoService.InstanceProfile));
 
-        await _tgService.Start(ct);
+        await _tgService.Start(stoppingToken);
 
-        await Task.Delay(Timeout.Infinite, ct);
+        try
+        {
+            await Task.Delay(Timeout.Infinite, stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            _logger.LogInformation("Shutting down...");
+        }
     }
 }

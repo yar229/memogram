@@ -1,7 +1,7 @@
 ﻿using Memogram.Clients.Telegram;
 using Memogram.Configs;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using System.Net;
 using Telegram.Bot;
@@ -10,10 +10,10 @@ namespace Memogram;
 
 internal static class ServicesExtensions
 {
-    public static void ConfigureAndValidate<T>(this IServiceCollection services, HostBuilderContext context)
+    public static void ConfigureAndValidate<T>(this IServiceCollection services, IConfiguration configuration)
         where T : class, IValidableConfig
     {
-        services.Configure<T>(context.Configuration.GetSection(T.SectionName));
+        services.Configure<T>(configuration.GetSection(T.SectionName));
         services.AddSingleton(sp =>
         {
             var memogram = sp.GetRequiredService<IOptions<T>>().Value;
