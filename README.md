@@ -6,5 +6,6 @@ Some functionality added:
 - trim large memos when /search
 - ability bot just like telegram message, not posting new message after save to memos
 - serilog logging
-- memos http requests retries
+- memos and telegram http requests retries
+- WebAPI: healscheck enpoint /api/health
   
