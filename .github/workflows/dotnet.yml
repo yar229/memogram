@@ -38,7 +38,7 @@ jobs:
 
       - name: Publish single-file
         shell: bash
-        run: dotnet publish Memogram/Memogram.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -o publish
+        run: dotnet publish Memogram/Memogram.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -o publish
 
       - name: Package (linux)
         if: runner.os == 'Linux'
