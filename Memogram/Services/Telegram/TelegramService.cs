@@ -38,19 +38,63 @@ public class TelegramService
         _allowedUsernames = ParseAllowedUsernames(config.AllowedUsernames);
     }
 
-    public async Task Start(
-        CancellationToken ct = default)
+    private static readonly UpdateType[] AllowedUpdates =
+        [UpdateType.Message, UpdateType.EditedMessage, UpdateType.CallbackQuery];
+
+    public async Task Start(CancellationToken ct = default)
     {
         
-        await _bot.SetMyCommands(_botCommands.Select(bc => new BotCommand(bc.Command, bc.Usage)));
 
-        _bot.StartReceiving(
-            HandleUpdateAsync,
-            HandleErrorAsync,
-            new ReceiverOptions { AllowedUpdates = [UpdateType.Message, UpdateType.EditedMessage, UpdateType.CallbackQuery] },
-            cancellationToken: ct);
+        await PollingLoopAsync(ct);
+    }
 
-        _logger.LogInformation("Bot is listening...");
+    private async Task PollingLoopAsync(CancellationToken ct)
+    {
+        int offset = 0;
+        int consecutiveFailures = 0;
+        bool isCommandsSet = false;
+
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                if (!isCommandsSet)
+                { 
+                    _logger.LogInformation("Setting bot commands...");
+                    await _bot.SetMyCommands(_botCommands.Select(bc => new BotCommand(bc.Command, bc.Usage)));
+                    isCommandsSet = true;
+                }
+
+                _logger.LogInformation("Bot is listening...");
+                await _bot.ReceiveAsync(
+                    HandleUpdateAsync,
+                    HandleErrorAsync,
+                    new ReceiverOptions { AllowedUpdates = [UpdateType.Message, UpdateType.EditedMessage, UpdateType.CallbackQuery] },
+                    cancellationToken: ct);
+
+                consecutiveFailures = 0;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                consecutiveFailures++;
+                await HandleErrorAsync(_bot, ex, ct);
+
+                var delay = TimeSpan.FromSeconds(Math.Min(consecutiveFailures, 5));
+                _logger.LogWarning("Polling error: {Message} {InnerMessage}. Restarting in {Delay:F1}s...", ex.Message, ex.InnerException?.Message, delay.TotalSeconds);
+                try
+                {
+                    await Task.Delay(delay, ct);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+        }
     }
 
     private async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken ct)
@@ -145,6 +189,7 @@ public class TelegramService
             return false;
 
         string arguments = message.Text.Substring(entity.Offset + entity.Length).Trim();
+        _logger.LogDebug("Processing command {cmd} for (chat: {chatId}, message: {messageId})", cleanCommand, message.Chat.Id, message.Id);
         await handler.Handle(message, arguments, ct);
         return true;
     }

@@ -100,7 +100,7 @@ public class ClientTests
     }
 
     [Fact]
-    public async Task CreateMemoAsync_OnServerError_DoesNotRetry()
+    public async Task CreateMemoAsync_OnServerError_Retries()
     {
         var attempts = 0;
         var handler = new RecordingHandler(_ =>
@@ -115,7 +115,7 @@ public class ClientTests
         await Assert.ThrowsAsync<HttpRequestException>(() =>
             client.CreateMemoAsync("token", "hello"));
 
-        Assert.Equal(1, attempts);
+        Assert.Equal(4, attempts);
     }
 
     [Fact]

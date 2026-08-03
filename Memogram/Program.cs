@@ -38,9 +38,9 @@ try
 
     builder.Services.ConfigureAndValidate<MemogramConfig>(builder.Configuration);
     builder.Services.AddMemoryCache();
+    builder.Services.AddSingleton<IMimeTypeDetector, FileExtensionMimeTypeDetector>();
     builder.Services.AddSingleton<MemosClient>();
     builder.Services.AddSingleton<MemogramService>();
-
 
     builder.Services.ConfigureAndValidate<TelegramConfig>(builder.Configuration);
     builder.Services.AddTelegramClient("telegram_bot_client");
@@ -56,8 +56,6 @@ try
 
     builder.Services.ConfigureAndValidate<WebConfig>(builder.Configuration);
     builder.Services.AddSingleton<HealthCheckService>();
-
-    builder.Services.AddSingleton<IMimeTypeDetector, FileExtensionMimeTypeDetector>();
 
     builder.Services.AddHostedService<MainService>();
 

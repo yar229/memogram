@@ -41,13 +41,6 @@ public class MainService : BackgroundService
 
         await _tgService.Start(stoppingToken);
 
-        try
-        {
-            await Task.Delay(Timeout.Infinite, stoppingToken);
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-            _logger.LogInformation("Shutting down...");
-        }
+        _logger.LogInformation("Shutting down...");
     }
 }
