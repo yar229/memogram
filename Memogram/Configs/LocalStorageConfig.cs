@@ -1,9 +1,12 @@
-﻿namespace Memogram.Configs;
+﻿using Microsoft.Extensions.Configuration;
+
+namespace Memogram.Configs;
 
 public class LocalStorageConfig : IValidableConfig
 {
     public static string SectionName => "LocalStorage";
 
+    [ConfigurationKeyName("File")]
     public string Filename { get; set; } = "data.txt";
 
     public void Validate()

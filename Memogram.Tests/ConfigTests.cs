@@ -1,4 +1,5 @@
 ﻿using Memogram.Configs;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace Memogram.Tests;
@@ -81,6 +82,22 @@ public class ConfigTests
         var config = new LocalStorageConfig { Filename = "test.txt" };
         config.Validate();
         Assert.True(Path.IsPathRooted(config.Filename));
+    }
+
+    [Fact]
+    public void LocalStorageConfig_BindsFromFileKey()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["LocalStorage:File"] = "custom.txt"
+            })
+            .Build();
+
+        var config = configuration.GetSection(LocalStorageConfig.SectionName).Get<LocalStorageConfig>();
+
+        Assert.NotNull(config);
+        Assert.Equal("custom.txt", config!.Filename);
     }
 
     //[Fact]
