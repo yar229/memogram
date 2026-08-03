@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using System.Text.Json;
 using Memogram.Clients.Memos;
@@ -51,6 +51,8 @@ public class MemoLinkTests
     {
         BotToken = "123:token",
         SearchReplyMessagesTrim = 200,
+        DoReplyToMessage = false,
+        Reactions = new TelegramConfig.ReactionsConfig()
     };
 
     [Fact]
@@ -93,7 +95,7 @@ public class MemoLinkTests
             store,
             new MyTelegramBotClient(new TelegramBotClientOptions("123:token"), new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)))),
             memoService,
-            new TelegramConfig { BotToken = "123:token", SearchReplyMessagesTrim = 200 },
+            new TelegramConfig { BotToken = "123:token", SearchReplyMessagesTrim = 200, DoReplyToMessage = false, Reactions = new TelegramConfig.ReactionsConfig() },
             new FileExtensionMimeTypeDetector(),
             linkCache,
             NullLogger<MessageHandler>.Instance);

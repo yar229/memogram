@@ -9,8 +9,10 @@ public class TelegramConfig : IValidableConfig
     public string? Proxy { get; set; } = string.Empty;
     public string? AllowedUsernames { get; set; } = string.Empty;
 
-    public string? OnlyLikeSavedMessageWith { get; set; } = string.Empty;
-    
+    public required bool DoReplyToMessage { get; set; } = false;
+
+    public required ReactionsConfig Reactions { get; set; } = new ();
+
     public required int SearchReplyMessagesTrim { get; set; } = 200;
 
     public TimeSpan CacheMessageForEditTime { get; set; } = TimeSpan.FromHours(1);
@@ -22,5 +24,15 @@ public class TelegramConfig : IValidableConfig
 
         if (string.IsNullOrWhiteSpace(BotProxyAddr))
             BotProxyAddr = "https://api.telegram.org";
+    }
+
+
+    public class ReactionsConfig
+    {
+        public string MemoCreated { get; set; } = "👌";
+
+        public string MemoEdited { get; set; } = "✍";
+
+        public string MemoEditFailed { get; set; } = "🥴";
     }
 }

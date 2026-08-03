@@ -29,14 +29,14 @@ public class ConfigTests
     [Fact]
     public void TelegramConfig_Validate_ThrowsOnEmptyBotToken()
     {
-        var config = new TelegramConfig { BotToken = "", SearchReplyMessagesTrim = 200 };
+        var config = new TelegramConfig { BotToken = "", SearchReplyMessagesTrim = 200, DoReplyToMessage = false, Reactions = new TelegramConfig.ReactionsConfig()  };
         Assert.Throws<InvalidOperationException>(config.Validate);
     }
 
     [Fact]
     public void TelegramConfig_Validate_PassesWithValidBotToken()
     {
-        var config = new TelegramConfig { BotToken = "123:abc", SearchReplyMessagesTrim = 200 };
+        var config = new TelegramConfig { BotToken = "123:abc", SearchReplyMessagesTrim = 200, DoReplyToMessage = false, Reactions = new TelegramConfig.ReactionsConfig() };
         config.Validate();
     }
 

@@ -99,7 +99,7 @@ public class MessageHandler
         if (!_linkCache.TryGetMemoName(chatId, message.Id, out var memoName) || memoName is null)
         {
             _logger.LogWarning("Memo not found in cache for edited message (chat {ChatId}, message {MessageId})", chatId, message.Id);
-            var likeReaction = new ReactionTypeEmoji { Emoji = "🥴" };
+            var likeReaction = new ReactionTypeEmoji { Emoji = _config.Reactions.MemoEditFailed };
             await _tgBotClient.SetMessageReaction(chatId, message.Id, [likeReaction]);
             return;
         }
@@ -122,7 +122,7 @@ public class MessageHandler
             await _memoService.UpdateMemoAsync(accessToken!, memo, ct);
             _logger.LogInformation("Memo {MemoName} updated from edited message (chat {ChatId}, message {MessageId})", memoName, chatId, message.Id);
 
-            var likeReaction = new ReactionTypeEmoji { Emoji = "✍" };
+            var likeReaction = new ReactionTypeEmoji { Emoji = _config.Reactions.MemoEdited };
             await _tgBotClient.SetMessageReaction(chatId, message.Id, [likeReaction]);
         }
         catch (Exception ex)
@@ -159,24 +159,19 @@ public class MessageHandler
 
     public async Task SendMessageSaved(Message message, long chatId, string memoname, string msg, CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(_config.OnlyLikeSavedMessageWith))
-        {
-            var inlineKeyboard = CallbackQueryHandler.BuildKeyboard(memoname);
+        if (_config.DoReplyToMessage)
             await _tgBotClient.SendMessage(
                 chatId,
                 msg,
                 parseMode: ParseMode.Markdown,
                 disableNotification: true,
                 replyParameters: new ReplyParameters { MessageId = message.MessageId },
-                replyMarkup: inlineKeyboard,
+                replyMarkup: CallbackQueryHandler.BuildKeyboard(memoname),
                 cancellationToken: ct
             );
-        }
-        else
-        {
-            var likeReaction = new ReactionTypeEmoji { Emoji = _config.OnlyLikeSavedMessageWith };
-            await _tgBotClient.SetMessageReaction(chatId, message.Id, [likeReaction]);
-        }
+
+        var likeReaction = new ReactionTypeEmoji { Emoji = _config.Reactions.MemoCreated };
+        await _tgBotClient.SetMessageReaction(chatId, message.Id, [likeReaction]);
     }
 
     public async Task<(string filePath, Stream content)> GetFileAsync(string fileId, CancellationToken ct)
