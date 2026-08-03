@@ -93,7 +93,7 @@ public class MemosClient
         {
             sb = new StringBuilder(content.Length + 10);
             foreach (var tag in tags!)
-                sb.Append($"#{tag} ");
+                sb.Append($"#{tag.TrimStart('#')} ");
             sb.Append(content);
         }
 
@@ -210,5 +210,5 @@ public class MemosClient
     }
 
     private string Url(string path)
-        => $"{_baseUrl}{path}";
+        => $"{_baseUrl.TrimEnd('/')}/{path.TrimStart('/')}";
 }
