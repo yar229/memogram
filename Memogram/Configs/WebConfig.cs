@@ -13,9 +13,9 @@ public class WebConfig : IValidableConfig
     public void Validate()
     {
         if (Port is < 1 or > 65535)
-            throw new InvalidOperationException("Health:Port must be between 1 and 65535");
+            throw new InvalidOperationException("WebConfig:Port must be between 1 and 65535");
 
         if (HealthCheckTimeoutSeconds <= 0)
-            throw new InvalidOperationException("Health:CheckTimeoutSeconds must be greater than 0");
+            throw new InvalidOperationException("WebConfig:CheckTimeoutSeconds must be greater than 0");
     }
 }
