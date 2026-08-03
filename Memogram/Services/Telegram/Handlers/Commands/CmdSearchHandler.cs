@@ -4,6 +4,7 @@ using Memogram.Services.Memos;
 using Memogram.Services.UserStore;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
@@ -66,10 +67,21 @@ public class CmdSearchHandler(MemogramService _memoService, IMyTelegramBotClient
             : content;
         string tgMessage = $"[🔗]({baseUrl}/{memoUrl}) {trimmedContent.TrimEnd()}";
 
-        await _tgBotClient.SendMessage(chatId, tgMessage,
-            parseMode: ParseMode.Markdown,
-            disableNotification: true,
-            linkPreviewOptions: LinkPreviewOptions.Disabled,
-            cancellationToken: ct);
+        try
+        {
+            await _tgBotClient.SendMessage(chatId, tgMessage,
+                parseMode: ParseMode.Markdown,
+                disableNotification: true,
+                linkPreviewOptions: LinkPreviewOptions.Disabled,
+                cancellationToken: ct);
+        }
+        catch (ApiRequestException ex) when (ex.ErrorCode == 400 && ex.Message.Contains("can't parse entities", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Failed to send search result as markdown, falling back to plain text: {Message}", ex.Message);
+            await _tgBotClient.SendMessage(chatId, tgMessage,
+                disableNotification: true,
+                linkPreviewOptions: LinkPreviewOptions.Disabled,
+                cancellationToken: ct);
+        }
     }
 }
