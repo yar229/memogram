@@ -92,7 +92,10 @@ public class MemoLinkTests
 
         var linkCache = new MemoLinkCache(new MemoryCache(new MemoryCacheOptions()), TgConfig());
         var handler = new MessageHandler(
-            new MyTelegramBotClient(new TelegramBotClientOptions("123:token"), new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)))),
+            new MyTelegramBotClient(new TelegramBotClientOptions("123:token"), new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"ok\":true,\"result\":true}", Encoding.UTF8, "application/json"),
+            }))),
             memoService,
             new TelegramConfig { BotToken = "123:token", SearchReplyMessagesTrim = 200, DoReplyToMessage = false, Reactions = new TelegramConfig.ReactionsConfig() },
             new FileExtensionMimeTypeDetector(),
