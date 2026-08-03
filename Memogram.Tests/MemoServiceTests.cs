@@ -52,7 +52,21 @@ public class MemoServiceTests
     public void BuildMemoSearchFilter_EscapesSpecialChars()
     {
         var result = MemogramService.BuildMemoSearchFilter("hello \"world\"", "users/me", "me");
-        Assert.Equal("content.contains(\"hello \"world\"\") && creator == \"users/me\"", result);
+        Assert.Equal("content.contains(\"hello \\\"world\\\"\") && creator == \"users/me\"", result);
+    }
+
+    [Fact]
+    public void BuildMemoSearchFilter_EscapesBackslash()
+    {
+        var result = MemogramService.BuildMemoSearchFilter("a\\b", "users/me", "me");
+        Assert.Equal("content.contains(\"a\\\\b\") && creator == \"users/me\"", result);
+    }
+
+    [Fact]
+    public void BuildMemoSearchFilter_EscapesControlChars()
+    {
+        var result = MemogramService.BuildMemoSearchFilter("line1\nline2\t\"x\"", "users/me", "me");
+        Assert.Equal("content.contains(\"line1\\nline2\\t\\\"x\\\"\") && creator == \"users/me\"", result);
     }
 
     [Fact]

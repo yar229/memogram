@@ -166,7 +166,7 @@ public partial class MemogramService
 
     public static string BuildMemoSearchFilter(string searchString, string userName, string userUsername)
     {
-        var filter = $"content.contains(\"{searchString}\")";
+        var filter = $"content.contains(\"{EscapeFilterString(searchString)}\")";
 
         var creator = userName;
         if (string.IsNullOrEmpty(creator) && !string.IsNullOrEmpty(userUsername))
@@ -175,6 +175,24 @@ public partial class MemogramService
             return filter;
 
         return $"{filter} && creator == \"{creator}\"";
+    }
+
+    private static string EscapeFilterString(string value)
+    {
+        var sb = new StringBuilder(value.Length);
+        foreach (char c in value)
+        {
+            switch (c)
+            {
+                case '\\': sb.Append("\\\\"); break;
+                case '"': sb.Append("\\\""); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                default: sb.Append(c); break;
+            }
+        }
+        return sb.ToString();
     }
 
     public static string FormatContent(string content, MessageEntity[] entities)
