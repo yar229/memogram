@@ -1,4 +1,4 @@
-using Memogram.Clients.Memos.Models;
+﻿using Memogram.Clients.Memos.Models;
 using Memogram.Configs;
 using Microsoft.Extensions.Logging;
 using Polly;
@@ -102,7 +102,7 @@ public class MemosClient
             Content = doAddTags ? sb!.ToString() : content,
             Visibility = visibility,
         };
-        using var response = await SendWithAuthAsync(HttpMethod.Post, Url("/api/v1/memos"), accessToken, body, ct);
+        using var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Post, Url("/api/v1/memos"), accessToken, body, ct2), ct);
         await ThrowIfNotSuccessAsync(response, ct);
         var memo = await response.Content.ReadFromJsonAsync<Memo>(cancellationToken: ct);
         return memo ?? throw new InvalidOperationException("No memo in response");
