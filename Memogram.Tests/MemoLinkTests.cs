@@ -87,12 +87,11 @@ public class MemoLinkTests
             NullLogger<MemogramService>.Instance);
 
         var dataFile = Path.Combine(Path.GetTempPath(), $"memogram-link-test-{Guid.NewGuid():N}.txt");
-        var store = new UserStoreService(new LocalStorageConfig { Filename = dataFile }, NullLogger<UserStoreService>.Instance);
-        store.SetUserAccessTokenAsync(42, "access-token").GetAwaiter().GetResult();
+        //var store = new UserStoreService(new LocalStorageConfig { Filename = dataFile }, NullLogger<UserStoreService>.Instance);
+        //store.SetUserAccessTokenAsync(42, "access-token").GetAwaiter().GetResult();
 
         var linkCache = new MemoLinkCache(new MemoryCache(new MemoryCacheOptions()), TgConfig());
         var handler = new MessageHandler(
-            store,
             new MyTelegramBotClient(new TelegramBotClientOptions("123:token"), new HttpClient(new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)))),
             memoService,
             new TelegramConfig { BotToken = "123:token", SearchReplyMessagesTrim = 200, DoReplyToMessage = false, Reactions = new TelegramConfig.ReactionsConfig() },
@@ -120,7 +119,7 @@ public class MemoLinkTests
         {
             linkCache.Record(100, 5, "memos/1");
 
-            await handler.HandleEditedAsync(EditMessage(5, 100, "new content"), CancellationToken.None);
+            await handler.HandleEditedAsync(EditMessage(5, 100, "new content"), "empty_access_token", CancellationToken.None);
 
             Assert.NotNull(memosStub.LastPatchBody);
             using var doc = JsonDocument.Parse(memosStub.LastPatchBody!);
@@ -140,7 +139,7 @@ public class MemoLinkTests
         var (handler, memosStub, linkCache, dataFile) = BuildHandler();
         try
         {
-            await handler.HandleEditedAsync(EditMessage(999, 100, "new content"), CancellationToken.None);
+            await handler.HandleEditedAsync(EditMessage(999, 100, "new content"), "empty_access_token", CancellationToken.None);
 
             Assert.Equal(0, memosStub.RequestCount);
         }

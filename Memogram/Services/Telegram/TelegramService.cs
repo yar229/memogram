@@ -1,7 +1,9 @@
-﻿using Memogram.Clients.Telegram;
+﻿using Memogram.Clients.Memos.Models;
+using Memogram.Clients.Telegram;
 using Memogram.Configs;
 using Memogram.Services.Telegram.Handlers;
 using Memogram.Services.Telegram.Handlers.Commands;
+using Memogram.Services.UserStore;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
@@ -16,12 +18,13 @@ public class TelegramService
     private readonly TelegramConfig _config;
     private readonly ILogger<TelegramService> _logger;
     private readonly IMyTelegramBotClient _bot;
+    private readonly UserStoreService _storeService;
     private readonly HashSet<string> _allowedUsernames;
     private ICmdHandler[] _botCommands = null!;
     private MessageHandler _messageHandler = null!;
     private CallbackQueryHandler _callbackQueryHandler = null!;
 
-    public TelegramService(TelegramConfig config, IMyTelegramBotClient bot, 
+    public TelegramService(TelegramConfig config, IMyTelegramBotClient bot, UserStoreService storeService,
         IEnumerable<ICmdHandler> cmdHandlers,
         MessageHandler messageHandler,
         CallbackQueryHandler callbackQueryHandler,
@@ -29,6 +32,7 @@ public class TelegramService
     {
         _config = config;
         _bot = bot;
+        _storeService = storeService;
         _botCommands = cmdHandlers.ToArray();
         _messageHandler = messageHandler;
         _callbackQueryHandler = callbackQueryHandler;
@@ -103,7 +107,7 @@ public class TelegramService
         {
             if (update.CallbackQuery is { } callbackQuery)
             {
-                await _callbackQueryHandler.HandleAsync(callbackQuery, ct);
+                await HandleCallbackAsync(callbackQuery, ct);
                 return;
             }
 
@@ -127,29 +131,58 @@ public class TelegramService
         }
     }
 
+    #region Handlers ===========================================================================================================
+
     private async Task HandleMessageAsync(Message message, CancellationToken ct)
     {
-        bool isUserAllowed = await ProcessUserAllowed(message.Chat.Id, message.From, ct);
+        bool isUserAllowed = await ProcessUserAllowed(message.Chat.Id, message.From?.Username, ct);
         if (!isUserAllowed)
             return;
+
+        if (!_storeService.TryGetUserAccessToken(message.From?.Id, out var accessToken) || string.IsNullOrEmpty(accessToken))
+        {
+            await _bot.SendMessage(message.Chat.Id, "Please start the bot with /start <access_token>", cancellationToken: ct);
+            return;
+        }
 
         var processed = await ProcessBotCommand(message, ct);
         if (processed)
             return;
 
-        await _messageHandler.HandleAsync(message, ct);
+        await _messageHandler.HandleMessageCreateAsync(message, accessToken, ct);
     }
 
     private async Task HandleEditedMessageAsync(Message message, CancellationToken ct)
     {
-        bool isUserAllowed = await ProcessUserAllowed(message.Chat.Id, message.From, ct);
+        bool isUserAllowed = await ProcessUserAllowed(message.Chat.Id, message.From?.Username, ct);
         if (!isUserAllowed)
             return;
+
+        if (!_storeService.TryGetUserAccessToken(message.From?.Id, out var accessToken) || string.IsNullOrEmpty(accessToken))
+        {
+            await _bot.SendMessage(message.Chat.Id, "Please start the bot with /start <access_token>", cancellationToken: ct);
+            return;
+        }
 
         if (null != ExtractBotCommand(message))
             return;
 
-        await _messageHandler.HandleEditedAsync(message, ct);
+        await _messageHandler.HandleEditedAsync(message, accessToken, ct);
+    }
+
+    private async Task HandleCallbackAsync(CallbackQuery callbackQuery, CancellationToken ct)
+    {
+        bool isUserAllowed = await ProcessUserAllowed(callbackQuery.Message?.Chat.Id, callbackQuery.From.Username, ct);
+        if (!isUserAllowed)
+            return;
+
+        if (!_storeService.TryGetUserAccessToken(callbackQuery.From?.Id, out var accessToken) || string.IsNullOrEmpty(accessToken))
+        {
+            await _bot.AnswerCallbackQuery(callbackQuery.Id, "Please start the bot with /start <access_token>", showAlert: true, cancellationToken: ct);
+            return;
+        }
+
+        await _callbackQueryHandler.HandleAsync(callbackQuery, accessToken, ct);
     }
 
     private Task HandleErrorAsync(ITelegramBotClient _, Exception exception, CancellationToken ct)
@@ -172,6 +205,7 @@ public class TelegramService
         }
         return Task.CompletedTask;
     }
+    #endregion Handlers ===========================================================================================================
 
     private async Task<bool> ProcessBotCommand(Message message, CancellationToken ct)
     {
@@ -197,12 +231,13 @@ public class TelegramService
     private MessageEntity? ExtractBotCommand(Message message) 
         => message.Entities?.FirstOrDefault(ent => ent.Type == MessageEntityType.BotCommand && ent.Offset == 0);
 
-    private async Task SendError(long chatId, Exception ex, CancellationToken ct)
+    private async Task SendError(long? chatId, Exception ex, CancellationToken ct)
     {
         _logger.LogError(ex, ex.Message);
         try
         {
-            await _bot.SendMessage(chatId, $"Error: {ex.Message}", cancellationToken: ct);
+            if (null != chatId)
+                await _bot.SendMessage(chatId, $"Error: {ex.Message}", cancellationToken: ct);
         }
         catch
         {
@@ -219,16 +254,16 @@ public class TelegramService
         return _allowedUsernames.Contains(username.Trim().ToLowerInvariant());
     }
 
-    private async Task<bool> ProcessUserAllowed(long chatId, User? from, CancellationToken ct)
+    private async Task<bool> ProcessUserAllowed(long? chatId, string? username, CancellationToken ct)
     {
-        if (!IsUserAllowed(from?.Username))
+        if (!IsUserAllowed(username))
         {
-            if (string.IsNullOrEmpty(from?.Username))
+            if (string.IsNullOrEmpty(username))
             {
-                await SendError(chatId, new InvalidOperationException("Your account must have a username to use this bot"), ct);
+                    await SendError(chatId, new InvalidOperationException("Your account must have a username to use this bot"), ct);
                 return false;
             }
-            await SendError(chatId, new InvalidOperationException($"Your account {from.Username} is not allowed to use this bot"), ct);
+            await SendError(chatId, new InvalidOperationException($"Your account {username} is not allowed to use this bot"), ct);
             return false;
         }
 

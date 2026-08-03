@@ -27,18 +27,14 @@ public class CallbackQueryHandler
         _logger = logger;
     }
 
-    public async Task HandleAsync(CallbackQuery callbackQuery, CancellationToken ct)
+    public async Task HandleAsync(CallbackQuery callbackQuery, string memoAccessToken, CancellationToken ct)
     {
         var data = callbackQuery.Data ?? "";
         var userId = callbackQuery.From.Id;
         var chatId = callbackQuery.Message?.Chat.Id ?? 0;
         var messageId = callbackQuery.Message?.MessageId ?? 0;
 
-        if (!_storeService.TryGetUserAccessToken(userId, out var accessToken) || string.IsNullOrEmpty(accessToken))
-        {
-            await _tgBotClient.AnswerCallbackQuery(callbackQuery.Id, "Please start the bot with /start <access_token>", showAlert: true, cancellationToken: ct);
-            return;
-        }
+
 
         var parts = data.Split(' ');
         if (parts.Length != 2)
@@ -53,7 +49,7 @@ public class CallbackQueryHandler
         Memo memo;
         try
         {
-            memo = await _memoService.GetMemoAsync(accessToken!, memoName, ct);
+            memo = await _memoService.GetMemoAsync(memoAccessToken!, memoName, ct);
         }
         catch (Exception ex)
         {
@@ -83,7 +79,7 @@ public class CallbackQueryHandler
 
         try
         {
-            memo = await _memoService.UpdateMemoAsync(accessToken!, memo, ct);
+            memo = await _memoService.UpdateMemoAsync(memoAccessToken!, memo, ct);
         }
         catch (Exception ex)
         {

@@ -21,9 +21,14 @@ public class UserStoreService
         return LoadFromFileAsync(ct);
     }
 
-    public bool TryGetUserAccessToken(long userId, out string? accessToken)
+    public bool TryGetUserAccessToken(long? userId, out string? accessToken)
     {
-        return _userAccessTokenCache.TryGetValue(userId, out accessToken);
+        if (null == userId)
+        {
+            accessToken = null;
+            return false;
+        }
+        return _userAccessTokenCache.TryGetValue(userId.Value, out accessToken);
     }
 
     public Task SetUserAccessTokenAsync(long userId, string accessToken)

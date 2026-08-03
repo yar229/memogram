@@ -13,7 +13,6 @@ namespace Memogram.Services.Telegram.Handlers;
 
 public class MessageHandler
 {
-    private readonly UserStoreService _storeService;
     private readonly IMyTelegramBotClient _tgBotClient;
     private readonly MemogramService _memoService;
     private readonly TelegramConfig _config;
@@ -21,13 +20,12 @@ public class MessageHandler
     private readonly MemoLinkCache _linkCache;
     private readonly ILogger<MessageHandler> _logger;
 
-    public MessageHandler(UserStoreService storeService, IMyTelegramBotClient tgBotClient, MemogramService memoService,
+    public MessageHandler(IMyTelegramBotClient tgBotClient, MemogramService memoService,
         TelegramConfig config,
         IMimeTypeDetector mimeTypeDetector,
         MemoLinkCache linkCache,
         ILogger<MessageHandler> logger)
     {
-        _storeService = storeService;
         _tgBotClient = tgBotClient;
         _memoService = memoService;
         _config = config;
@@ -36,16 +34,10 @@ public class MessageHandler
         _logger = logger;
     }
 
-    public async Task HandleAsync(Message message, CancellationToken ct)
+    public async Task HandleMessageCreateAsync(Message message, string memoAccessToken, CancellationToken ct)
     {
         var chatId = message.Chat.Id;
         var from = message.From!;
-
-        if (!_storeService.TryGetUserAccessToken(from.Id, out var accessToken) || string.IsNullOrEmpty(accessToken))
-        {
-            await _tgBotClient.SendMessage(chatId, "Please start the bot with /start <access_token>", cancellationToken: ct);
-            return;
-        }
 
         string content = _memoService.PrepareMessageContent(message);
 
@@ -63,7 +55,7 @@ public class MessageHandler
         Memo memo;
         try
         {
-            memo = await _memoService.HandleMemoCreation(accessToken!, message.MediaGroupId, content, ct);
+            memo = await _memoService.HandleMemoCreation(memoAccessToken!, message.MediaGroupId, content, ct);
             _logger.LogInformation("Memo {MemoName} created from message (chat {ChatId}, message {MessageId})", memo.Name, chatId, message.Id);
         }
         catch (Exception ex)
@@ -74,15 +66,15 @@ public class MessageHandler
         }
 
         if (message.Document is not null)
-            await ProcessFileMessage(accessToken!, chatId, message.Document.FileId, memo, ct);
+            await ProcessFileMessage(memoAccessToken!, chatId, message.Document.FileId, memo, ct);
         if (message.Voice is not null)
-            await ProcessFileMessage(accessToken!, chatId, message.Voice.FileId, memo, ct);
+            await ProcessFileMessage(memoAccessToken!, chatId, message.Voice.FileId, memo, ct);
         if (message.Video is not null)
-            await ProcessFileMessage(accessToken!, chatId, message.Video.FileId, memo, ct);
+            await ProcessFileMessage(memoAccessToken!, chatId, message.Video.FileId, memo, ct);
         if (message.Photo?.Length > 0)
         {
             var photo = message.Photo[^1];
-            await ProcessFileMessage(accessToken!, chatId, photo.FileId, memo, ct);
+            await ProcessFileMessage(memoAccessToken!, chatId, photo.FileId, memo, ct);
         }
 
         var memoUid = MemogramService.ExtractMemoUidFromName(memo.Name);
@@ -92,7 +84,7 @@ public class MessageHandler
         _linkCache.Record(message.Chat.Id, message.Id, memo.Name);
     }
 
-    public async Task HandleEditedAsync(Message message, CancellationToken ct)
+    public async Task HandleEditedAsync(Message message, string memoAccessToken, CancellationToken ct)
     {
         var chatId = message.Chat.Id;
 
@@ -104,22 +96,18 @@ public class MessageHandler
             return;
         }
 
-        var from = message.From;
-        if (from is null || !_storeService.TryGetUserAccessToken(from.Id, out var accessToken) || string.IsNullOrEmpty(accessToken))
-            return;
-
         string content = _memoService.PrepareMessageContent(message);
         if (string.IsNullOrEmpty(content))
             return;
 
         try
         {
-            var memo = await _memoService.GetMemoAsync(accessToken!, memoName, ct);
+            var memo = await _memoService.GetMemoAsync(memoAccessToken!, memoName, ct);
             if (memo.Content == content)
                 return;
 
             memo.Content = content;
-            await _memoService.UpdateMemoAsync(accessToken!, memo, ct);
+            await _memoService.UpdateMemoAsync(memoAccessToken!, memo, ct);
             _logger.LogInformation("Memo {MemoName} updated from edited message (chat {ChatId}, message {MessageId})", memoName, chatId, message.Id);
 
             var likeReaction = new ReactionTypeEmoji { Emoji = _config.Reactions.MemoEdited };
