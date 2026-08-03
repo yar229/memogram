@@ -139,14 +139,12 @@ public class TelegramService
         if (!isUserAllowed)
             return;
 
-        if (!_storeService.TryGetUserAccessToken(message.From?.Id, out var accessToken) || string.IsNullOrEmpty(accessToken))
-        {
-            await _bot.SendMessage(message.Chat.Id, "Please start the bot with /start <access_token>", cancellationToken: ct);
-            return;
-        }
-
         var processed = await ProcessBotCommand(message, ct);
         if (processed)
+            return;
+
+        string? accessToken = await ProcessAccessToken(message.From?.Id, message.Chat.Id, ct);
+        if (string.IsNullOrEmpty(accessToken))
             return;
 
         await _messageHandler.HandleMessageCreateAsync(message, accessToken, ct);
@@ -158,11 +156,9 @@ public class TelegramService
         if (!isUserAllowed)
             return;
 
-        if (!_storeService.TryGetUserAccessToken(message.From?.Id, out var accessToken) || string.IsNullOrEmpty(accessToken))
-        {
-            await _bot.SendMessage(message.Chat.Id, "Please start the bot with /start <access_token>", cancellationToken: ct);
+        string? accessToken = await ProcessAccessToken(message.From?.Id, message.Chat.Id, ct);
+        if (string.IsNullOrEmpty(accessToken))
             return;
-        }
 
         if (null != ExtractBotCommand(message))
             return;
@@ -221,11 +217,24 @@ public class TelegramService
         var handler = _botCommands.FirstOrDefault(h => h.Command == cleanCommand);
         if (null == handler)
             return false;
+        if (handler.RequireRegistration && string.IsNullOrEmpty(await ProcessAccessToken(message.From?.Id, message.Chat.Id, ct)))
+            return true;
 
         string arguments = message.Text.Substring(entity.Offset + entity.Length).Trim();
         _logger.LogDebug("Processing command {cmd} for (chat: {chatId}, message: {messageId})", cleanCommand, message.Chat.Id, message.Id);
         await handler.Handle(message, arguments, ct);
         return true;
+    }
+
+    private async Task<string?> ProcessAccessToken(long? fromId, long? chatId, CancellationToken ct)
+    {
+        if (!_storeService.TryGetUserAccessToken(fromId, out var accessToken) || string.IsNullOrEmpty(accessToken))
+        {
+            if (null != chatId)
+                await _bot.SendMessage(chatId, "Please start the bot with /start <access_token>", cancellationToken: ct);
+            return null;
+        }
+        return accessToken;
     }
 
     private MessageEntity? ExtractBotCommand(Message message) 

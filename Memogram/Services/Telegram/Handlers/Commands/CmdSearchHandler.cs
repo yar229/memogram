@@ -17,6 +17,8 @@ public class CmdSearchHandler(MemogramService _memoService, IMyTelegramBotClient
     public string Command => "/search";
     public string Usage => "Usage: /search <words>";
 
+    public bool RequireRegistration => true;
+
     public async Task Handle(Message message, string searchString, CancellationToken ct)
     {
         var chatId = message.Chat.Id;

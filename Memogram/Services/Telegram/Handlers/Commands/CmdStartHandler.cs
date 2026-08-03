@@ -14,6 +14,8 @@ public class CmdStartHandler(MemogramService _memoService, IMyTelegramBotClient 
     public string Command => "/start";
     public string Usage => "Usage: /start <access_token>";
 
+    public bool RequireRegistration => false;
+
     public async Task Handle(Message message, string args, CancellationToken ct)
     {
         var chatId = message.Chat.Id;

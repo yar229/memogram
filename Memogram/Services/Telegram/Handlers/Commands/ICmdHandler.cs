@@ -8,5 +8,7 @@ public interface ICmdHandler
 
     string Usage { get; }
 
+    bool RequireRegistration { get; }
+
     Task Handle(Message message, string args, CancellationToken ct);
 }
