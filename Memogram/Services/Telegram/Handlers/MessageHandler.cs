@@ -3,7 +3,6 @@ using Memogram.Clients.Telegram;
 using Memogram.Configs;
 using Memogram.Services.Memos;
 using Memogram.Services.MimeTypeDetectors;
-using Memogram.Services.UserStore;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -11,29 +10,12 @@ using Telegram.Bot.Types.Enums;
 
 namespace Memogram.Services.Telegram.Handlers;
 
-public class MessageHandler
+public class MessageHandler(IMyTelegramBotClient _tgBotClient, MemogramService _memoService,
+    TelegramConfig _config,
+    IMimeTypeDetector _mimeTypeDetector,
+    MemoLinkCache _linkCache,
+    ILogger<MessageHandler> _logger)
 {
-    private readonly IMyTelegramBotClient _tgBotClient;
-    private readonly MemogramService _memoService;
-    private readonly TelegramConfig _config;
-    private readonly IMimeTypeDetector _mimeTypeDetector;
-    private readonly MemoLinkCache _linkCache;
-    private readonly ILogger<MessageHandler> _logger;
-
-    public MessageHandler(IMyTelegramBotClient tgBotClient, MemogramService memoService,
-        TelegramConfig config,
-        IMimeTypeDetector mimeTypeDetector,
-        MemoLinkCache linkCache,
-        ILogger<MessageHandler> logger)
-    {
-        _tgBotClient = tgBotClient;
-        _memoService = memoService;
-        _config = config;
-        _mimeTypeDetector = mimeTypeDetector;
-        _linkCache = linkCache;
-        _logger = logger;
-    }
-
     public async Task HandleMessageCreateAsync(Message message, string memoAccessToken, CancellationToken ct)
     {
         var chatId = message.Chat.Id;
@@ -84,7 +66,7 @@ public class MessageHandler
         _linkCache.Record(message.Chat.Id, message.Id, memo.Name);
     }
 
-    public async Task HandleEditedAsync(Message message, string memoAccessToken, CancellationToken ct)
+    public async Task HandleMessageEditAsync(Message message, string memoAccessToken, CancellationToken ct)
     {
         var chatId = message.Chat.Id;
 

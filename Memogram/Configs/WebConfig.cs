@@ -16,6 +16,6 @@ public class WebConfig : IValidableConfig
             throw new InvalidOperationException("WebConfig:Port must be between 1 and 65535");
 
         if (HealthCheckTimeoutSeconds <= 0)
-            throw new InvalidOperationException("WebConfig:CheckTimeoutSeconds must be greater than 0");
+            throw new InvalidOperationException("WebConfig:HealthCheckTimeoutSeconds must be greater than 0");
     }
 }

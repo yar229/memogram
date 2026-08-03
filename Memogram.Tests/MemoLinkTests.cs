@@ -122,7 +122,7 @@ public class MemoLinkTests
         {
             linkCache.Record(100, 5, "memos/1");
 
-            await handler.HandleEditedAsync(EditMessage(5, 100, "new content"), "empty_access_token", CancellationToken.None);
+            await handler.HandleMessageEditAsync(EditMessage(5, 100, "new content"), "empty_access_token", CancellationToken.None);
 
             Assert.NotNull(memosStub.LastPatchBody);
             using var doc = JsonDocument.Parse(memosStub.LastPatchBody!);
@@ -142,7 +142,7 @@ public class MemoLinkTests
         var (handler, memosStub, linkCache, dataFile) = BuildHandler();
         try
         {
-            await handler.HandleEditedAsync(EditMessage(999, 100, "new content"), "empty_access_token", CancellationToken.None);
+            await handler.HandleMessageEditAsync(EditMessage(999, 100, "new content"), "empty_access_token", CancellationToken.None);
 
             Assert.Equal(0, memosStub.RequestCount);
         }

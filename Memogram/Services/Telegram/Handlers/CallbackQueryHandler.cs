@@ -1,7 +1,6 @@
 ﻿using Memogram.Clients.Memos.Models;
 using Memogram.Clients.Telegram;
 using Memogram.Services.Memos;
-using Memogram.Services.UserStore;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -10,31 +9,15 @@ using Telegram.Bot.Types.ReplyMarkups;
 
 namespace Memogram.Services.Telegram.Handlers;
 
-public class CallbackQueryHandler
+public class CallbackQueryHandler(MemogramService _memoService, IMyTelegramBotClient _tgBotClient,
+        ILogger<CallbackQueryHandler> _logger)
 {
-    private readonly UserStoreService _storeService;
-    private readonly MemogramService _memoService;
-    private readonly IMyTelegramBotClient _tgBotClient;
-    private readonly ILogger<CallbackQueryHandler> _logger;
-
-    public CallbackQueryHandler(UserStoreService storeService, MemogramService memoService,
-        IMyTelegramBotClient tgBotClient,
-        ILogger<CallbackQueryHandler> logger)
-    {
-        _storeService = storeService;
-        _memoService = memoService;
-        _tgBotClient = tgBotClient;
-        _logger = logger;
-    }
-
     public async Task HandleAsync(CallbackQuery callbackQuery, string memoAccessToken, CancellationToken ct)
     {
         var data = callbackQuery.Data ?? "";
         var userId = callbackQuery.From.Id;
         var chatId = callbackQuery.Message?.Chat.Id ?? 0;
         var messageId = callbackQuery.Message?.MessageId ?? 0;
-
-
 
         var parts = data.Split(' ');
         if (parts.Length != 2)

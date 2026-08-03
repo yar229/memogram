@@ -1,5 +1,4 @@
-﻿using Memogram.Clients.Memos.Models;
-using Memogram.Clients.Telegram;
+﻿using Memogram.Clients.Telegram;
 using Memogram.Configs;
 using Memogram.Services.Telegram.Handlers;
 using Memogram.Services.Telegram.Handlers.Commands;
@@ -42,19 +41,13 @@ public class TelegramService
         _allowedUsernames = ParseAllowedUsernames(config.AllowedUsernames);
     }
 
-    private static readonly UpdateType[] AllowedUpdates =
-        [UpdateType.Message, UpdateType.EditedMessage, UpdateType.CallbackQuery];
-
     public async Task Start(CancellationToken ct = default)
     {
-        
-
         await PollingLoopAsync(ct);
     }
 
     private async Task PollingLoopAsync(CancellationToken ct)
     {
-        int offset = 0;
         int consecutiveFailures = 0;
         bool isCommandsSet = false;
 
@@ -163,7 +156,7 @@ public class TelegramService
         if (null != ExtractBotCommand(message))
             return;
 
-        await _messageHandler.HandleEditedAsync(message, accessToken, ct);
+        await _messageHandler.HandleMessageEditAsync(message, accessToken, ct);
     }
 
     private async Task HandleCallbackAsync(CallbackQuery callbackQuery, CancellationToken ct)
