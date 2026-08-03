@@ -53,15 +53,6 @@ public class TelegramService
         _logger.LogInformation("Bot is listening...");
     }
 
-    public bool IsUserAllowed(string? username)
-    {
-        if (_allowedUsernames.Count == 0)
-            return true;
-        if (string.IsNullOrEmpty(username))
-            return false;
-        return _allowedUsernames.Contains(username.Trim().ToLowerInvariant());
-    }
-
     private async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken ct)
     {
         try
@@ -94,18 +85,9 @@ public class TelegramService
 
     private async Task HandleMessageAsync(Message message, CancellationToken ct)
     {
-        var chatId = message.Chat.Id;
-        var from = message.From!;
-        if (!IsUserAllowed(from.Username))
-        {
-            if (string.IsNullOrEmpty(from.Username))
-            {
-                await SendError(chatId, new InvalidOperationException("Your account must have a username to use this bot"), ct);
-                return;
-            }
-            await SendError(chatId, new InvalidOperationException($"Your account {from.Username} is not allowed to use this bot"), ct);
+        bool isUserAllowed = await ProcessUserAllowed(message.Chat.Id, message.From, ct);
+        if (!isUserAllowed)
             return;
-        }
 
         var processed = await ProcessBotCommand(message, ct);
         if (processed)
@@ -116,8 +98,11 @@ public class TelegramService
 
     private async Task HandleEditedMessageAsync(Message message, CancellationToken ct)
     {
-        var from = message.From;
-        if (from is null || !IsUserAllowed(from.Username))
+        bool isUserAllowed = await ProcessUserAllowed(message.Chat.Id, message.From, ct);
+        if (!isUserAllowed)
+            return;
+
+        if (null != ExtractBotCommand(message))
             return;
 
         await _messageHandler.HandleEditedAsync(message, ct);
@@ -149,7 +134,7 @@ public class TelegramService
         if (string.IsNullOrEmpty(message.Text))
             return false;
 
-        var entity = message.Entities?.FirstOrDefault(ent => ent.Type == MessageEntityType.BotCommand && ent.Offset == 0);
+        var entity = ExtractBotCommand(message);
         if (null == entity)
             return false;
 
@@ -164,6 +149,9 @@ public class TelegramService
         return true;
     }
 
+    private MessageEntity? ExtractBotCommand(Message message) 
+        => message.Entities?.FirstOrDefault(ent => ent.Type == MessageEntityType.BotCommand && ent.Offset == 0);
+
     private async Task SendError(long chatId, Exception ex, CancellationToken ct)
     {
         _logger.LogError(ex, ex.Message);
@@ -177,6 +165,30 @@ public class TelegramService
         }
     }
 
+    private bool IsUserAllowed(string? username)
+    {
+        if (_allowedUsernames.Count == 0)
+            return true;
+        if (string.IsNullOrEmpty(username))
+            return false;
+        return _allowedUsernames.Contains(username.Trim().ToLowerInvariant());
+    }
+
+    private async Task<bool> ProcessUserAllowed(long chatId, User? from, CancellationToken ct)
+    {
+        if (!IsUserAllowed(from?.Username))
+        {
+            if (string.IsNullOrEmpty(from?.Username))
+            {
+                await SendError(chatId, new InvalidOperationException("Your account must have a username to use this bot"), ct);
+                return false;
+            }
+            await SendError(chatId, new InvalidOperationException($"Your account {from.Username} is not allowed to use this bot"), ct);
+            return false;
+        }
+
+        return true;
+    }
 
     private static HashSet<string> ParseAllowedUsernames(string? raw)
     {
