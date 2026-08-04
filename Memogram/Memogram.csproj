@@ -6,7 +6,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Memogram</RootNamespace>
+    <ApplicationIcon>memogram.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="memogram.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Memogram.Tests" />
