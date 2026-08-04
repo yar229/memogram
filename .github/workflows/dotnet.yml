@@ -23,10 +23,10 @@ jobs:
         include:
           - os: ubuntu-latest
             rid: linux-x64
-            asset: memogram-linux-x64.tar.gz
+            ext: tar.gz
           - os: windows-latest
             rid: win-x64
-            asset: memogram-win-x64.zip
+            ext: zip
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,6 +43,10 @@ jobs:
           VERSION="${VERSION#v}"
           echo "RELEASE_VERSION=${VERSION:-0.0.0}" >> "$GITHUB_ENV"
 
+      - name: Compute asset name
+        shell: bash
+        run: echo "RELEASE_ASSET=memogram-${{ matrix.rid }}-${RELEASE_VERSION}.${{ matrix.ext }}" >> "$GITHUB_ENV"
+
       - name: Publish single-file
         shell: bash
         run: dotnet publish Memogram/Memogram.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -p:Version=$RELEASE_VERSION -o publish
@@ -50,18 +54,18 @@ jobs:
       - name: Package (linux)
         if: runner.os == 'Linux'
         shell: bash
-        run: tar -czf ${{ matrix.asset }} -C publish .
+        run: tar -czf "$RELEASE_ASSET" -C publish .
 
       - name: Package (windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path publish/* -DestinationPath ${{ matrix.asset }}
+        run: Compress-Archive -Path publish/* -DestinationPath $env:RELEASE_ASSET
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.rid }}
-          path: ${{ matrix.asset }}
+          path: ${{ env.RELEASE_ASSET }}
 
   release:
     name: Publish release
