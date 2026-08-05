@@ -24,7 +24,7 @@ public partial class MemogramService
         [MessageEntityType.DateTime] = static (string p, string c, string s, MessageEntity entity) => $"{p}{c}({entity.UnixTime}){s}",
         [MessageEntityType.Blockquote] = static (string p, string c, string s, MessageEntity entity) => $"{p}\n> {c}\n\n{s}",
         [MessageEntityType.Code] = static (string p, string c, string s, MessageEntity entity) => $"{p}`{c}`{s}",
-        [MessageEntityType.Pre] = static (string p, string c, string s, MessageEntity entity) => $"{p}```\n{c}\n```{s}",
+        [MessageEntityType.Pre] = static (string p, string c, string s, MessageEntity entity) => $"{p}\n```{entity.Language}\n{c}\n```{s}",
         [MessageEntityType.Mention] = static (string p, string c, string s, MessageEntity entity) => $"{p}[{c}](https://t.me/{c[1..]}){s}",
     };
     private readonly MemosClient _memosClient;
@@ -243,19 +243,10 @@ public partial class MemogramService
         bool doAddTags = _config.TagsToAdd?.Any() ?? false;
         if (doAddTags)
         {
-            StringBuilder? sb = null;
-            sb = new StringBuilder(content.Length + 10);
+            StringBuilder? sb = new StringBuilder(content.Length + 10);
             foreach (var tag in _config.TagsToAdd!)
                 sb.Append($"#{tag.TrimStart('#')} ");
 
-            string leadingSpaces = new string(content.TakeWhile(char.IsWhiteSpace).ToArray());
-            if (!leadingSpaces.Contains('\n'))
-                foreach (var nltag in TagsNeedNewLine)
-                    if (content[leadingSpaces.Length..].StartsWith(nltag))
-                    {
-                        sb.Append('\n');
-                        break;
-                    }
             sb.Append(content);
             return sb.ToString();
         }
