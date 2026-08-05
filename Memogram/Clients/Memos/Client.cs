@@ -16,7 +16,6 @@ public class MemosClient
     private readonly HttpClient _httpClient;
     private readonly ResiliencePipeline<HttpResponseMessage> _retryPipeline;
     private readonly ILogger<MemosClient> _logger;
-
     private const int MaxRetryAttempts = 3;
 
     public MemosClient(string baseUrl,
@@ -85,21 +84,11 @@ public class MemosClient
         return wrapper?.User ?? throw new InvalidOperationException("No user in response");
     }
 
-    public async Task<Memo> CreateMemoAsync(string accessToken, string content, string visibility = "PRIVATE", IEnumerable<string>? tags = null, CancellationToken ct = default)
+    public async Task<Memo> CreateMemoAsync(string accessToken, string content, string visibility = "PRIVATE", CancellationToken ct = default)
     {
-        bool doAddTags = tags?.Any() ?? false;
-        StringBuilder? sb = null;
-        if (doAddTags)
-        {
-            sb = new StringBuilder(content.Length + 10);
-            foreach (var tag in tags!)
-                sb.Append($"#{tag.TrimStart('#')} ");
-            sb.Append(content);
-        }
-
         var body = new CreateMemoRequest
         {
-            Content = doAddTags ? sb!.ToString() : content,
+            Content = content,
             Visibility = visibility,
         };
         using var response = await RetryAsync(ct2 => SendWithAuthAsync(HttpMethod.Post, Url("/api/v1/memos"), accessToken, body, ct2), ct);

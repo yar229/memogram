@@ -38,6 +38,9 @@ public partial class MemogramService
 
     public InstanceProfile? InstanceProfile => _instanceProfile;
 
+    private readonly IEnumerable<string> TagsNeedNewLine = ["```"];
+
+
     public MemogramService(MemosClient memosClient,  MemogramConfig config, IMemoryCache mediaGroupCache, ILogger<MemogramService> logger)
     {
         _memosClient = memosClient;
@@ -112,12 +115,12 @@ public partial class MemogramService
             if (_mediaGroupCache.TryGetValue(mediaGroupId, out var cached) && cached is Memo cachedMemo)
                 return cachedMemo;
 
-            var createdMemo = await _memosClient.CreateMemoAsync(accessToken, content, tags: _config.TagsToAdd, ct: ct);
+            var createdMemo = await _memosClient.CreateMemoAsync(accessToken, content, ct: ct);
             _mediaGroupCache.Set(mediaGroupId, createdMemo, _mediaGroupCacheTtl);
             return createdMemo;
         }
 
-        return await _memosClient.CreateMemoAsync(accessToken, content, tags: _config.TagsToAdd, ct: ct);
+        return await _memosClient.CreateMemoAsync(accessToken, content, ct: ct);
     }
 
     public async Task ProcessFileMessage(string accessToken, FileInfo file, Memo memo, CancellationToken ct)
@@ -151,6 +154,8 @@ public partial class MemogramService
 
         if (message.ReplyToMessage != null)
             content = PrependReplyToMessage(message.ReplyToMessage, content);
+
+        content = PrependCustomTags(content);
 
         return content;
     }
@@ -232,6 +237,30 @@ public partial class MemogramService
 
     private string PrependReplyToMessage(Message msg, string content) 
         => $"\n> {FormatUserstring(msg)}: {PrepareMessageContent(msg)} \n\n {content}";
+
+    private string PrependCustomTags(string content)
+    {
+        bool doAddTags = _config.TagsToAdd?.Any() ?? false;
+        if (doAddTags)
+        {
+            StringBuilder? sb = null;
+            sb = new StringBuilder(content.Length + 10);
+            foreach (var tag in _config.TagsToAdd!)
+                sb.Append($"#{tag.TrimStart('#')} ");
+
+            string leadingSpaces = new string(content.TakeWhile(char.IsWhiteSpace).ToArray());
+            if (!leadingSpaces.Contains('\n'))
+                foreach (var nltag in TagsNeedNewLine)
+                    if (content[leadingSpaces.Length..].StartsWith(nltag))
+                    {
+                        sb.Append('\n');
+                        break;
+                    }
+            sb.Append(content);
+            return sb.ToString();
+        }
+        return content;
+    }
 
     private string FormatUserstring(Message msg)
     {
